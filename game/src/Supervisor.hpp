@@ -398,8 +398,8 @@ struct ZunTimer
     void SetCurrent(i32 value)
     {
         this->current = value;
-        this->previous = -999;
         this->subFrame = 0.0;
+        this->previous = -999;
     }
 };
 }; // namespace th08

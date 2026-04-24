@@ -16,16 +16,15 @@ DIFFABLE_STATIC_ARRAY_ASSIGN(const char *, 9, g_ResultsStageList) = {"Extra Stag
 
 const char *__fastcall ResultScreen::GetStageName(i32 stage)
 {
-    i32 stageLocal = stage;
     const char *stageName;
 
-    if (stageLocal >= 9)
+    if (stage >= 9)
     {
         stageName = "Clear";
     }
     else
     {
-        stageName = g_ResultsStageList[stageLocal];
+        stageName = g_ResultsStageList[stage];
     }
 
     return stageName;
@@ -46,16 +45,12 @@ void ResultScreen::LogScoreDataToFile(ResultScreen *resultScreen)
 
 void ResultScreen::LinkScoreEx(void *out, i32 difficulty, i32 character)
 {
-    ScoreListNode *score = (ScoreListNode *)((u8 *)this + difficulty * 0x90);
-
-    ScoreDat::LinkScore((ScoreListNode *)((u8 *)score + character * 0xc + 0x1144c), (Hscr *)out);
+    ScoreDat::LinkScore((ScoreListNode *)((u8 *)this + difficulty * 0x90 + 0x1144c + character * 0xc), (Hscr *)out);
 }
 
 void ResultScreen::FreeScore(i32 difficulty, i32 character)
 {
-    ScoreListNode *score = (ScoreListNode *)((u8 *)this + difficulty * 0x90);
-
-    ScoreDat::FreeAllScores((ScoreListNode *)((u8 *)score + character * 0xc + 0x1144c));
+    ScoreDat::FreeAllScores((ScoreListNode *)((u8 *)this + difficulty * 0x90 + 0x1144c + character * 0xc));
 }
 
 void ResultScreen::HandleCategorySelectScreen()
@@ -110,8 +105,8 @@ i32 ResultScreen::HandleResultKeyboard()
 
 void __fastcall ResultScreen::FormatDate(char *buffer)
 {
-    struct tm *currentLocalTime;
     time_t currentTime;
+    struct tm *currentLocalTime;
 
     time(&currentTime);
     currentLocalTime = localtime(&currentTime);

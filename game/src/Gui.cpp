@@ -48,16 +48,16 @@ ZunResult Gui::LoadMsg(const char *path)
     return ZUN_SUCCESS;
 }
 
-bool Gui::MsgWait()
+BOOL Gui::MsgWait()
 {
     if (this->impl == NULL)
     {
-        return 0;
+        return FALSE;
     }
 
     if (this->impl->waitCounter > 0)
     {
-        return 0;
+        return FALSE;
     }
 
     return this->impl->msgState >= 0;

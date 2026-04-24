@@ -28,7 +28,7 @@ struct Gui
 
     ZunResult ActualAddedCallback();
     ZunResult LoadMsg(const char *path);
-    bool MsgWait();
+    BOOL MsgWait();
     void FreeMsgFile();
 
     unknown_fields(0x0, 0x8);

@@ -125,7 +125,20 @@ ZunBool GameManager::FinalBCleared(i32 team)
 
 ZunBool GameManager::FinalBClearedWithAnyTeam()
 {
-    return this->FinalBCleared(0) || this->FinalBCleared(1) || this->FinalBCleared(2) || this->FinalBCleared(3);
+    GameManager *gameManager = this;
+    ZunBool result;
+
+    if (!gameManager->FinalBCleared(0) && !gameManager->FinalBCleared(1) && !gameManager->FinalBCleared(2) &&
+        !gameManager->FinalBCleared(3))
+    {
+        result = FALSE;
+    }
+    else
+    {
+        result = TRUE;
+    }
+
+    return result;
 }
 
 ZunBool GameManager::FinalACleared(i32 team)
@@ -135,12 +148,38 @@ ZunBool GameManager::FinalACleared(i32 team)
 
 ZunBool GameManager::FinalAClearedWithAnyTeam()
 {
-    return this->FinalACleared(0) || this->FinalACleared(1) || this->FinalACleared(2) || this->FinalACleared(3);
+    GameManager *gameManager = this;
+    ZunBool result;
+
+    if (!gameManager->FinalACleared(0) && !gameManager->FinalACleared(1) && !gameManager->FinalACleared(2) &&
+        !gameManager->FinalACleared(3))
+    {
+        result = FALSE;
+    }
+    else
+    {
+        result = TRUE;
+    }
+
+    return result;
 }
 
 ZunBool GameManager::FinalBClearedWithAllTeams()
 {
-    return this->FinalBCleared(0) && this->FinalBCleared(1) && this->FinalBCleared(2) && this->FinalBCleared(3);
+    GameManager *gameManager = this;
+    ZunBool result;
+
+    if (gameManager->FinalBCleared(0) && gameManager->FinalBCleared(1) && gameManager->FinalBCleared(2) &&
+        gameManager->FinalBCleared(3))
+    {
+        result = TRUE;
+    }
+    else
+    {
+        result = FALSE;
+    }
+
+    return result;
 }
 
 void GameManager::CutChain()
