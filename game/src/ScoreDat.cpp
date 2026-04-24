@@ -10,6 +10,16 @@ i32 __fastcall ScoreDat::LinkScore(ScoreListNode *prevNode, Hscr *newScore)
 
 void __fastcall ScoreDat::FreeAllScores(ScoreListNode *score)
 {
+    ScoreListNode *block;
+    ScoreListNode *next;
+
+    block = *(ScoreListNode **)((u8 *)score + 4);
+    while (block != NULL)
+    {
+        next = *(ScoreListNode **)((u8 *)block + 4);
+        g_ZunMemory.Free(block);
+        block = next;
+    }
 }
 
 ScoreDat *ScoreDat::OpenScore(const char *filename)
@@ -54,6 +64,9 @@ i32 ScoreDat::ParsePLST(ScoreDat *score, Plst *outPlst)
 
 void ScoreDat::ReleaseScore(ScoreDat *score)
 {
+    ScoreDat::FreeAllScores(*(ScoreListNode **)((u8 *)score + 0xc));
+    g_ZunMemory.Free(*(void **)((u8 *)score + 0xc));
+    g_ZunMemory.Free(score);
 }
 
 } /* namespace th08 */

@@ -6,14 +6,16 @@ namespace th08
 
 i32 Ending::ReadEndFileParameter()
 {
-    i32 parameter = atol(this->endFileCursor);
+    i32 parameter;
 
-    while (*this->endFileCursor != '\0')
+    parameter = atol(this->endFileCursor);
+
+    while (*this->endFileCursor)
     {
         this->endFileCursor++;
     }
 
-    while (*this->endFileCursor == '\0')
+    while (!*this->endFileCursor)
     {
         this->endFileCursor++;
     }
@@ -42,6 +44,41 @@ ZunResult Ending::RegisterChain()
 
 ChainCallbackResult Ending::OnUpdate(Ending *ending)
 {
+    i32 i;
+    i32 j;
+
+    i = 0;
+
+    while (true)
+    {
+        if (ending->ParseEndFile())
+        {
+            return CHAIN_CALLBACK_RESULT_CONTINUE_AND_REMOVE_JOB;
+        }
+
+        for (j = 0; j < 15; j++)
+        {
+            g_AnmManager->ExecuteScript((AnmVm *)((u8 *)ending + j * sizeof(AnmVm) + 0x14));
+        }
+
+        if (*(i32 *)((u8 *)ending + 0x2a58) == 0)
+        {
+            break;
+        }
+
+        if ((g_CurFrameInput & TH_BUTTON_SKIP) == 0)
+        {
+            break;
+        }
+
+        if (i >= 8)
+        {
+            break;
+        }
+
+        i++;
+    }
+
     return CHAIN_CALLBACK_RESULT_CONTINUE;
 }
 
@@ -67,7 +104,16 @@ ZunResult Ending::AddedCallback(Ending *ending)
 
 ZunResult Ending::DeletedCallback(Ending *ending)
 {
-    return ZUN_ERROR;
+    g_AnmManager->ReleaseAnm(24);
+    g_Supervisor.unk174 = 6;
+    g_AnmManager->ReleaseSurface(0);
+    g_ZunMemory.Free(*(void **)((u8 *)ending + 0x2a54));
+    g_Chain.Cut(*(ChainElem **)((u8 *)ending + 4));
+    *(ChainElem **)((u8 *)ending + 4) = NULL;
+    g_ZunMemory.RemoveFromRegistry(ending);
+    delete ending;
+
+    return ZUN_SUCCESS;
 }
 
 } /* namespace th08 */

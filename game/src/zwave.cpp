@@ -46,7 +46,6 @@ HRESULT CSoundManager::Initialize(HWND hWnd, DWORD dwCoopLevel, DWORD dwPrimaryC
                                   DWORD dwPrimaryBitRate)
 {
     HRESULT hr;
-    LPDIRECTSOUNDBUFFER pDSBPrimary = NULL;
 
     SAFE_RELEASE(m_pDS);
 
@@ -58,7 +57,6 @@ HRESULT CSoundManager::Initialize(HWND hWnd, DWORD dwCoopLevel, DWORD dwPrimaryC
     if (FAILED(hr = m_pDS->SetCooperativeLevel(hWnd, dwCoopLevel)))
         return DXTRACE_ERR(TEXT("SetCooperativeLevel"), hr);
 
-    // Set primary buffer format
     SetPrimaryBufferFormat(dwPrimaryChannels, dwPrimaryFreq, dwPrimaryBitRate);
 
     return S_OK;

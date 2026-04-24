@@ -1833,17 +1833,16 @@ void AnmManager::FUN_00466310(IDirect3DTexture8 *outTexture, i32 x, i32 y, i32 w
     }
 }
 
-#pragma var_order(buf, fontWidth)
 void AnmManager::DrawVmTextFmt(AnmVm *vm, COLORREF textColor, COLORREF shadowColor, const char *fmt, ...)
 {
-    char buf[128];
-    int fontWidth = vm->fontWidth;
-
+    char buf[132];
+    int fontWidth;
     va_list args;
 
+    fontWidth = vm->fontWidth;
     va_start(args, fmt);
     vsprintf(buf, fmt, args);
-    va_end(args);
+    args = 0;
 
     this->FUN_00466310(vm->loadedSprite->texture, vm->loadedSprite->startPixelInclusive.x,
                        vm->loadedSprite->startPixelInclusive.y, vm->loadedSprite->width, vm->loadedSprite->height,
