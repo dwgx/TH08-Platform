@@ -1,0 +1,46 @@
+# Build artifacts
+game/build/
+game/build.ninja
+game/*.obj
+game/pragma_var_order.obj
+
+# Toolchain downloads (huge, re-fetchable via scripts/create_devenv.py)
+game/scripts/prefix/
+game/scripts/dls/
+
+# Copyrighted game binaries (MUST NEVER be committed)
+game/resources/th08.exe
+game/resources/thbgm.dat
+game/resources/th08.dat
+
+# Logs and per-build artifacts
+game/*.log
+game/diff_report*.json
+game/reccmp-user.yml
+game/reccmp-build.yml
+game/build/reccmp-build.yml
+reccmp-build.yml
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Editor / system
+.vscode/
+.vs/
+*.swp
+*.tmp
+Thumbs.db
+.DS_Store
+
+# DLL build output
+dll/build/
+dll/out/
+dll/cmake-build-*/
+dll/*.dll
+dll/*.exp
+dll/*.lib
+dll/*.pdb
+
+# Codex-persisted sessions
+.codex/
