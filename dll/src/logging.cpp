@@ -22,7 +22,18 @@ std::string resolve_log_path()
     }
     std::string dir = std::string(appdata) + "\\th08_platform";
     CreateDirectoryA(dir.c_str(), nullptr);
-    return dir + "\\log.txt";
+
+    const bool per_pid_log =
+        GetEnvironmentVariableA("TH08_PLATFORM_PEER", nullptr, 0) > 0 ||
+        GetEnvironmentVariableA("TH08_PLATFORM_LISTEN", nullptr, 0) > 0;
+    if (!per_pid_log) {
+        return dir + "\\log.txt";
+    }
+
+    char filename[64];
+    std::snprintf(filename, sizeof(filename), "\\log_pid%lu.txt",
+                  static_cast<unsigned long>(GetCurrentProcessId()));
+    return dir + filename;
 }
 }  // namespace
 
@@ -61,7 +72,11 @@ void log_shutdown()
 {
     std::lock_guard<std::mutex> lk(g_log_mtx);
     if (g_log_file) {
-        log_line("==== session end ====");
+        std::time_t t = std::time(nullptr);
+        char ts[32];
+        std::strftime(ts, sizeof(ts), "%H:%M:%S", std::localtime(&t));
+        fprintf(g_log_file, "[%s] ==== session end ====\n", ts);
+        fflush(g_log_file);
         fclose(g_log_file);
         g_log_file = nullptr;
     }

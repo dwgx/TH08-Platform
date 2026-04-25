@@ -1,7 +1,9 @@
 #include "input.h"
 
 #include "../logging.h"
+#include "../net/lockstep.h"
 #include "../state/globals.h"
+#include "game_loop.h"
 
 #include <windows.h>
 #include <MinHook.h>
@@ -21,18 +23,39 @@ using GetInput_t = int(__fastcall*)();
 GetInput_t g_original_GetInput = nullptr;
 
 std::atomic<std::uint64_t> g_input_call_count{0};
+std::uint64_t g_last_synced_frame = ~0ull;
+std::uint16_t g_last_logged_input = 0xffff;
 
 int __fastcall hooked_GetInput()
 {
     const int ret = g_original_GetInput();
 
+    th08_platform::net::poll();
+
+    const auto frame = th08_platform::hooks::current_frame();
     const auto cur = *globals::at<std::uint16_t>(globals::kAddr_g_CurFrameInput);
-    const auto last = *globals::at<std::uint16_t>(globals::kAddr_g_LastFrameInput);
     const auto held = *globals::at<std::uint32_t>(globals::kAddr_g_NumOfFramesInputsWereHeld);
     const auto n = g_input_call_count.fetch_add(1, std::memory_order_relaxed) + 1;
 
-    if ((n % 60u) == 0 || cur != last) {
+    if (th08_platform::net::is_connected() && frame != g_last_synced_frame) {
+        th08_platform::net::send_local_input(frame, cur);
+
+        const auto peer_input =
+            th08_platform::net::wait_for_peer_input(frame, /*timeout_ms=*/200);
+        if (peer_input.has_value()) {
+            th08_platform::log_line(
+                "synced frame %llu: local=0x%04x remote=0x%04x",
+                static_cast<unsigned long long>(frame), cur, *peer_input);
+        } else {
+            th08_platform::log_line("peer timeout at frame %llu (local=0x%04x)",
+                                    static_cast<unsigned long long>(frame), cur);
+        }
+        g_last_synced_frame = frame;
+    }
+
+    if ((n % 60u) == 0 || cur != g_last_logged_input) {
         th08_platform::log_line("input: cur=0x%04x (held=%u)", cur, held);
+        g_last_logged_input = cur;
     }
 
     return ret;

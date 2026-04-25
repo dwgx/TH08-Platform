@@ -40,6 +40,8 @@ add_library(th08_platform SHARED
     src/logging.cpp
     src/hooks/game_loop.cpp
     src/hooks/input.cpp
+    src/net/udp_socket.cpp
+    src/net/lockstep.cpp
     src/state/frame_state.cpp
     src/state/heap_journal.cpp
 )
@@ -47,7 +49,7 @@ target_include_directories(th08_platform PRIVATE
     src
     ${minhook_SOURCE_DIR}/include
 )
-target_link_libraries(th08_platform PRIVATE minhook)
+target_link_libraries(th08_platform PRIVATE minhook ws2_32)
 target_compile_definitions(th08_platform PRIVATE
     WIN32_LEAN_AND_MEAN
     NOMINMAX

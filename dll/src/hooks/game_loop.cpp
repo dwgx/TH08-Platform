@@ -84,4 +84,9 @@ void uninstall_game_loop_hook()
     MH_Uninitialize();
 }
 
+std::uint64_t current_frame()
+{
+    return g_frame_count.load(std::memory_order_relaxed);
+}
+
 }  // namespace th08_platform::hooks
