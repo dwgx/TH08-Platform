@@ -1,0 +1,9 @@
+
+==== th08_platform session start 2026-04-25 21:14:15 ====
+[21:14:15] th08_platform.dll attached; starting hooks
+[21:14:15] peer connected at 127.0.0.1:7481
+[21:14:15] hooking GameManager::OnUpdate at 00439BC7
+[21:14:15] GameManager::OnUpdate hook enabled
+[21:14:15] hooking Controller::GetInput at 0043D970
+[21:14:15] Controller::GetInput hook enabled
+[21:14:15] phase 4 ready
