@@ -74,18 +74,33 @@ DWORD WINAPI dll_init_thread(LPVOID)
         th08_platform::log_line("phase 4 net init failed; staying local-only");
     }
 
-    // Sub-phase 5a opt-in: set TH08_PLATFORM_TEST_PLAYER2=1 to construct
-    // g_Player2 right after init. This is dangerous if the game hasn't
-    // finished initializing AnmManager/BulletManager - prefer to set this
-    // ONLY after manually playing past the title screen, then re-attaching.
+    // Sub-phase 5a opt-in:
+    //   TH08_PLATFORM_TEST_PLAYER2=1 -> Construct() only (alloc + ctor)
+    //   TH08_PLATFORM_TEST_PLAYER2=2 -> Construct() + Register() (chain)
+    //
+    // The =2 path is HAZARDOUS: chain dispatcher will tick g_Player2's
+    // OnUpdate every frame, but AddedCallback is not yet driven so
+    // helper FUN_'s may dereference NULL fields. Use only for
+    // exploratory crash testing.
+    //
+    // Both paths are dangerous if the game hasn't finished initializing
+    // AnmManager/BulletManager - prefer to set ONLY after manually
+    // playing past the title screen, then re-attaching.
     char p2_env[8] = {};
     if (GetEnvironmentVariableA("TH08_PLATFORM_TEST_PLAYER2", p2_env,
                                 static_cast<DWORD>(sizeof(p2_env))) > 0 &&
-        p2_env[0] == '1') {
-        th08_platform::log_line("phase 5a: TH08_PLATFORM_TEST_PLAYER2=1, attempting g_Player2 ctor");
+        (p2_env[0] == '1' || p2_env[0] == '2')) {
+        th08_platform::log_line("phase 5a: TH08_PLATFORM_TEST_PLAYER2=%c, attempting g_Player2 ctor",
+                                p2_env[0]);
         const bool p2_ok = th08_platform::player2::Construct();
         th08_platform::log_line("phase 5a: g_Player2 construct %s",
                                 p2_ok ? "ok" : "FAILED");
+        if (p2_ok && p2_env[0] == '2') {
+            th08_platform::log_line("phase 5a: TH08_PLATFORM_TEST_PLAYER2=2, attempting g_Player2 chain register");
+            const bool reg_ok = th08_platform::player2::Register();
+            th08_platform::log_line("phase 5a: g_Player2 register %s",
+                                    reg_ok ? "ok" : "FAILED");
+        }
     }
 
     if (game_loop_ok && input_ok && rollback_audio_ok && net_ok) {

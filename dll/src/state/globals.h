@@ -49,7 +49,7 @@ inline constexpr std::size_t kSize_ItemManager = 0x17b094;
 //   g_BulletManager (0x00f54e90) -> g_BulletManagerCalcChain(0x0160f408) = 0x6BA578
 // Layout-safe: no other named globals fall between, so capturing this many
 // bytes does NOT overrun into adjacent state. Heavy (~17 MB combined, mostly
-// inactive enemy/bullet slots) — Phase 4 may optimize via delta/sparse capture.
+// inactive enemy/bullet slots) - Phase 4 may optimize via delta/sparse capture.
 inline constexpr std::size_t kSize_EnemyManager = 0x9DCF10;
 inline constexpr std::size_t kSize_BulletManager = 0x6BA578;
 inline constexpr std::size_t kSize_Background = 0x6600;

@@ -42,7 +42,31 @@ bool Construct();
 void Destruct();
 
 // True iff Construct() has been called and returned true since the last
-// Destruct(). Used by 5b to gate chain registration.
+// Destruct(). Used by Register() and 5b to gate chain registration.
 bool IsConstructed() noexcept;
+
+// Registers g_Player2 with ZUN's update + draw chains, mirroring what
+// Player::RegisterChain (0x44C230) does for g_Player.
+//
+// HAZARD: once registered, g_Chain.Step() will tick g_Player2's OnUpdate
+// every frame. OnUpdate calls helpers (sub_44C5B0 etc.) that may
+// dereference fields populated only by Player::AddedCallback (e.g. the
+// shtFile heap pointers, the primary weapon AnmVm). Calling Register()
+// WITHOUT also driving AddedCallback for g_Player2 will likely crash on
+// first frame.
+//
+// Sub-phase 5b will pair Register() with a deferred AddedCallback path.
+// For 5a, Register() is provided so the wiring is in place, but it is
+// NOT auto-invoked - opt-in via env TH08_PLATFORM_TEST_PLAYER2=2.
+//
+// Returns true if all three chain inserts succeeded. On failure, calls
+// Unregister() to clean up partial state.
+bool Register();
+
+// Removes g_Player2 from the chains. Safe to call when not registered.
+void Unregister();
+
+// True iff the last Register() call succeeded and Unregister() hasn't run.
+bool IsRegistered() noexcept;
 
 }  // namespace th08_platform::player2
