@@ -166,23 +166,36 @@ void on_frame_tick(unsigned long long frame_no)
     if (frame_no % log_interval != 0) return;
 
     auto dump = [&](const char* tag, std::uint8_t* p) {
-        // Verified offsets (codex 5e batch):
-        //   +0x2B4 (=+173 dword) = live pos.x (float)
-        //   +0x2B8 (=+174 dword) = live pos.y (float)
-        //   +0x3BC..+0x3CC = hitbox AABB (min_x/y, max_x/y, with 0x3C4/0x3D0 unused)
+        // Verified offsets:
+        //   +0x2B4 / +0x2B8 = live pos.x / pos.y (float, codex 5e)
+        //   +0x38C / +0x390 / +0x398 / +0x39C = body AABB used by
+        //   TestHitbox sub_449FF0 (codex 5g-recon corrected this -
+        //   my earlier guess of +0x3BC was wrong - that's some other
+        //   per-frame field, not the hit-detection AABB)
         const int st = static_cast<int>(p[0]);
         const float pos_x = *reinterpret_cast<float*>(p + 0x2B4);
         const float pos_y = *reinterpret_cast<float*>(p + 0x2B8);
-        const float hb_min_x = *reinterpret_cast<float*>(p + 0x3BC);
-        const float hb_min_y = *reinterpret_cast<float*>(p + 0x3C0);
-        const float hb_max_x = *reinterpret_cast<float*>(p + 0x3C8);
-        const float hb_max_y = *reinterpret_cast<float*>(p + 0x3CC);
-        const float hb_w  = hb_max_x - hb_min_x;
-        const float hb_h  = hb_max_y - hb_min_y;
+        const float aabb_min_x = *reinterpret_cast<float*>(p + 0x38C);
+        const float aabb_min_y = *reinterpret_cast<float*>(p + 0x390);
+        const float aabb_max_x = *reinterpret_cast<float*>(p + 0x398);
+        const float aabb_max_y = *reinterpret_cast<float*>(p + 0x39C);
+        const float aabb_w = aabb_max_x - aabb_min_x;
+        const float aabb_h = aabb_max_y - aabb_min_y;
+        // Also peek the first hit-test slot at +0xBB834 (active flag at
+        // +60, center at +0/+4, radius at +8). Tells us if slots are
+        // populated (P2 should see same values as P1 if writer is
+        // this-aware AND running for both).
+        const std::uint8_t slot0_active =
+            *reinterpret_cast<std::uint8_t*>(p + 0xBB834 + 60);
+        const float slot0_cx = *reinterpret_cast<float*>(p + 0xBB834);
+        const float slot0_cy = *reinterpret_cast<float*>(p + 0xBB834 + 4);
+        const float slot0_r  = *reinterpret_cast<float*>(p + 0xBB834 + 8);
         th08_platform::log_line(
-            "%s frame=%llu state=%d pos=(%.1f,%.1f) hb=%.1fx%.1f midpoint=(%.1f,%.1f)",
-            tag, frame_no, st, pos_x, pos_y, hb_w, hb_h,
-            (hb_min_x + hb_max_x) * 0.5f, (hb_min_y + hb_max_y) * 0.5f);
+            "%s f=%llu st=%d pos=(%.1f,%.1f) aabb=%.1fx%.1f@(%.1f,%.1f) slot0[active=%d c=(%.1f,%.1f) r=%.1f]",
+            tag, frame_no, st, pos_x, pos_y, aabb_w, aabb_h,
+            (aabb_min_x + aabb_max_x) * 0.5f,
+            (aabb_min_y + aabb_max_y) * 0.5f,
+            static_cast<int>(slot0_active), slot0_cx, slot0_cy, slot0_r);
     };
     // p1: read g_Player (the singleton ZUN constructed at 0x17D5EF8).
     // p2: read our buffer.
