@@ -24,12 +24,12 @@ inline constexpr std::size_t kOffset_GameManager_globals = 0x0008;
 
 inline constexpr std::size_t kSize_GameManager = 0x3de3c;
 inline constexpr std::size_t kSize_ZunGlobals = 0x00e4;
-inline constexpr std::size_t kSize_Rng = 0;  // TBD: no sizeof C_ASSERT found in decomp.
+inline constexpr std::size_t kSize_Rng = 0x0008;  // Verified: u16 seed + u32 generationCount + 2B pad.
 inline constexpr std::size_t kSize_CurFrameInput = 0x0002;
 inline constexpr std::size_t kSize_LastFrameInput = 0x0002;
 inline constexpr std::size_t kSize_IsEighthFrameOfHeldInput = 0x0002;
 inline constexpr std::size_t kSize_NumOfFramesInputsWereHeld = 0x0002;
-inline constexpr std::size_t kSize_Chain = 0;  // TBD: no sizeof C_ASSERT found in decomp.
+inline constexpr std::size_t kSize_Chain = 0x0040;  // Verified: 2 * sizeof(ChainElem) where ChainElem = 32B.
 inline constexpr std::size_t kSize_ControllerData = 0x0080;  // Global.cpp exposes a 32*4-byte array.
 inline constexpr std::size_t kSize_ItemManager = 0x17b094;
 inline constexpr std::size_t kSize_EnemyManager = 0;  // TBD: no sizeof C_ASSERT found in decomp.
