@@ -3,6 +3,8 @@
 #include <windows.h>
 #include <MinHook.h>
 
+#include <cstdlib>
+
 #include "../logging.h"
 #include "player2.h"
 
@@ -51,6 +53,39 @@ int __fastcall hooked_RegisterChain(unsigned char arg)
 
     g_player2_done = true;
     th08_platform::log_line("player2_hook: g_Player2 fully wired (ctor + chain)");
+
+    // Post-Register diagnostic: did Chain::AddToCalcChain auto-call
+    // Player::AddedCallback? If yes, playerState should be 1
+    // (PLAYER_STATE_SPAWNING) since AddedCallback writes that. If still
+    // 0 (PLAYER_STATE_ALIVE from ctor's memset), AddedCallback wasn't
+    // called and we need to invoke it explicitly for full init.
+    auto* const p2 = th08_platform::player2::g_Player2;
+    const int post_state = static_cast<int>(p2[0]);
+    const float pos_x = *reinterpret_cast<float*>(p2 + 0x3D8);
+    const float pos_y = *reinterpret_cast<float*>(p2 + 0x3E4);
+    const float hb_min_x = *reinterpret_cast<float*>(p2 + 0x3BC);
+    const float hb_max_x = *reinterpret_cast<float*>(p2 + 0x3C8);
+    th08_platform::log_line("player2: post-Register state=%d pos=(%.2f, %.2f) hitbox.x=[%.2f, %.2f]",
+                            post_state, pos_x, pos_y, hb_min_x, hb_max_x);
+
+    // Optional spawn-shift: env TH08_PLATFORM_PLAYER2_X_OFFSET=N moves
+    // g_Player2 by N pixels in X right after init. Useful for VISUAL
+    // confirmation that two players exist (without it they overlap).
+    char xoff_env[16] = {};
+    if (GetEnvironmentVariableA("TH08_PLATFORM_PLAYER2_X_OFFSET", xoff_env,
+                                static_cast<DWORD>(sizeof(xoff_env))) > 0) {
+        const float shift = static_cast<float>(atof(xoff_env));
+        if (shift != 0.0f) {
+            *reinterpret_cast<float*>(p2 + 0x3D8) += shift;
+            // Also nudge the hitbox AABB the same way so collision math
+            // (when 5c lands) sees the shifted position.
+            *reinterpret_cast<float*>(p2 + 0x3BC) += shift;
+            *reinterpret_cast<float*>(p2 + 0x3C8) += shift;
+            const float new_x = *reinterpret_cast<float*>(p2 + 0x3D8);
+            th08_platform::log_line("player2: shifted X by %.2f -> new pos.x=%.2f", shift, new_x);
+        }
+    }
+
     return result;
 }
 
