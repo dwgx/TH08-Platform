@@ -49,6 +49,7 @@ add_library(th08_platform SHARED
     src/state/player2.cpp
     src/state/player2_hook.cpp
     src/state/dual_collision.cpp
+    src/state/item_routing.cpp
     src/state/p2_input.cpp
     src/state/p2_lives.cpp
     src/state/hud.cpp
@@ -63,6 +64,9 @@ target_compile_definitions(th08_platform PRIVATE
     WIN32_LEAN_AND_MEAN
     NOMINMAX
     _CRT_SECURE_NO_WARNINGS
+)
+target_compile_options(th08_platform PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
 )
 set_target_properties(th08_platform PROPERTIES
     OUTPUT_NAME "th08_platform"

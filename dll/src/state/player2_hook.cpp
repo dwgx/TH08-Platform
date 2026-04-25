@@ -10,6 +10,7 @@
 #include "globals.h"
 #include "p2_lives.h"
 #include "dual_collision.h"
+#include "item_routing.h"
 
 namespace th08_platform::state {
 
@@ -231,17 +232,21 @@ void on_frame_tick(unsigned long long frame_no)
     // Real visual HUD pending IDA recon of AsciiManager API.
     const int p2_lives = th08_platform::state::p2_lives::snapshot_p2_lives();
     const auto hits = th08_platform::state::dual_collision::snapshot_hit_counters();
+    const auto items = th08_platform::state::item_routing::snapshot_counters();
     const unsigned long long redirects =
         th08_platform::state::p2_lives::snapshot_redirect_count();
     th08_platform::log_line(
         "HUD frame=%llu | P2 lives=%d | redirs=%llu | calls: TH=%llu BB=%llu GZ=%llu LZ=%llu | "
-        "TH p1/p2=%llu/%llu | BB p1/p2=%llu/%llu | GZ p1/p2=%llu/%llu | LZ p1/p2=%llu/%llu",
+        "TH p1/p2=%llu/%llu | BB p1/p2=%llu/%llu | GZ p1/p2=%llu/%llu | LZ p1/p2=%llu/%llu | "
+        "IT p1/p2=%llu/%llu calls=%llu | IA p1/p2=%llu/%llu",
         frame_no, p2_lives, redirects,
         hits.total_calls, hits.calls_44A230, hits.calls_44A470, hits.calls_laser,
         hits.p1_hits, hits.p2_hits,
         hits.p1_44A230_hits, hits.p2_44A230_hits,
         hits.p1_44A470_grazes, hits.p2_44A470_grazes,
-        hits.p1_laser_hits, hits.p2_laser_hits);
+        hits.p1_laser_hits, hits.p2_laser_hits,
+        items.routed_p1, items.routed_p2, items.routed_calls,
+        items.attracted_p1, items.attracted_p2);
 }
 
 void uninstall_player2_hook()
