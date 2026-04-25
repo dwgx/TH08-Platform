@@ -45,6 +45,13 @@ void Destruct();
 // Destruct(). Used by Register() and 5b to gate chain registration.
 bool IsConstructed() noexcept;
 
+// True iff g_Player2 should participate in routing decisions this frame.
+// Phase 5i routing semantics: P2 must be skipped by item-pickup nearest-
+// player and by enemy-aim nearest-player when in state 2 (dead) or 3
+// (respawn-ghost). State byte at +0x0000 is i8 (see player_layout.h).
+// Combine with IsConstructed() so callers can use one predicate.
+bool IsEligible() noexcept;
+
 // Registers g_Player2 with ZUN's update + draw chains, mirroring what
 // Player::RegisterChain (0x44C230) does for g_Player.
 //

@@ -20,6 +20,23 @@
 #include "state/p2_mirror.h"
 
 namespace {
+
+// Phase 5 (multiplayer) default-on policy: phase 5 sub-features auto-enable
+// without env vars so the loader-launched DLL "just works" for 2P play.
+// Set TH08_PLATFORM_DISABLE_MULTIPLAYER=1 to turn off the entire phase-5
+// stack at once. Set an individual sub-flag (e.g. TH08_PLATFORM_HUD=0) to
+// disable just that one. Phase 4 networking flags (PEER / LISTEN /
+// FAKE_RTT_MS) remain opt-in because they require explicit configuration.
+bool env_flag(const char* name, bool default_value)
+{
+    char buf[8] = {};
+    const DWORD len = GetEnvironmentVariableA(name, buf,
+                                              static_cast<DWORD>(sizeof(buf)));
+    if (len == 0) return default_value;
+    // Treat "0" / empty as disable, anything else as enable.
+    return buf[0] != '0';
+}
+
 std::uint16_t read_listen_port()
 {
     char value[32] = {};
@@ -80,32 +97,27 @@ DWORD WINAPI dll_init_thread(LPVOID)
         th08_platform::log_line("phase 4 net init failed; staying local-only");
     }
 
-    // Sub-phase 5b opt-in: TH08_PLATFORM_PLAYER2_AUTO=1 hooks
-    // Player::RegisterChain (0x44C230); on the first invocation, our
-    // detour runs the original then auto-Construct() + Register()
-    // g_Player2. This is the auto-flow that 5c+ will build on.
-    char p2_auto_env[8] = {};
-    if (GetEnvironmentVariableA("TH08_PLATFORM_PLAYER2_AUTO", p2_auto_env,
-                                static_cast<DWORD>(sizeof(p2_auto_env))) > 0 &&
-        p2_auto_env[0] == '1') {
-        th08_platform::log_line("phase 5b: TH08_PLATFORM_PLAYER2_AUTO=1, installing Player::RegisterChain hook");
+    // Phase 5 (multiplayer) is default-on. Set TH08_PLATFORM_DISABLE_MULTIPLAYER=1
+    // to turn off the entire phase-5 stack, or set a specific sub-flag to 0
+    // to disable just that one (e.g. TH08_PLATFORM_HUD=0).
+    const bool multiplayer = !env_flag("TH08_PLATFORM_DISABLE_MULTIPLAYER", false);
+    if (!multiplayer) {
+        th08_platform::log_line("phase 5: TH08_PLATFORM_DISABLE_MULTIPLAYER=1, multiplayer stack disabled");
+    }
+
+    // Sub-phase 5b: hook Player::RegisterChain so g_Player2 is auto-built
+    // when ZUN's Player::RegisterChain runs.
+    if (multiplayer && env_flag("TH08_PLATFORM_PLAYER2_AUTO", true)) {
+        th08_platform::log_line("phase 5b: installing Player::RegisterChain hook");
         const bool hook_ok = th08_platform::state::install_player2_hook();
         th08_platform::log_line("phase 5b: hook install %s",
                                 hook_ok ? "ok" : "FAILED");
     }
 
-    // Sub-phase 5a opt-in (manual / one-shot, distinct from 5b's auto-hook):
+    // Sub-phase 5a (manual / one-shot, distinct from 5b's auto-hook).
+    // Off by default; only enable for exploratory testing.
     //   TH08_PLATFORM_TEST_PLAYER2=1 -> Construct() only (alloc + ctor)
     //   TH08_PLATFORM_TEST_PLAYER2=2 -> Construct() + Register() (chain)
-    //
-    // The =2 path is HAZARDOUS: chain dispatcher will tick g_Player2's
-    // OnUpdate every frame, but AddedCallback is not yet driven so
-    // helper FUN_'s may dereference NULL fields. Use only for
-    // exploratory crash testing.
-    //
-    // Both paths are dangerous if the game hasn't finished initializing
-    // AnmManager/BulletManager - prefer to set ONLY after manually
-    // playing past the title screen, then re-attaching.
     char p2_env[8] = {};
     if (GetEnvironmentVariableA("TH08_PLATFORM_TEST_PLAYER2", p2_env,
                                 static_cast<DWORD>(sizeof(p2_env))) > 0 &&
@@ -123,62 +135,41 @@ DWORD WINAPI dll_init_thread(LPVOID)
         }
     }
 
-    // Sub-phase 5c opt-in: dual collision (Player::TestHitbox hook).
-    // Independent of 5b's auto-hook; useful only with PLAYER2_AUTO=1
-    // since the dual test no-ops if g_Player2 isn't constructed.
-    char dc_env[8] = {};
-    if (GetEnvironmentVariableA("TH08_PLATFORM_DUAL_COLLISION", dc_env,
-                                static_cast<DWORD>(sizeof(dc_env))) > 0 &&
-        dc_env[0] == '1') {
-        th08_platform::log_line("phase 5c: TH08_PLATFORM_DUAL_COLLISION=1, installing TestHitbox hook");
+    // Sub-phase 5i: dual bullet/laser routing.
+    if (multiplayer && env_flag("TH08_PLATFORM_DUAL_COLLISION", true)) {
+        th08_platform::log_line("phase 5i: installing dual_collision v2 hooks");
         const bool dc_ok = th08_platform::state::dual_collision::install_hook();
-        th08_platform::log_line("phase 5c: dual_collision install %s",
+        th08_platform::log_line("phase 5i: dual_collision v2 install %s",
                                 dc_ok ? "ok" : "FAILED");
     }
 
-    // Sub-phase 5d opt-in: per-player input routing.
-    // Hooks Player::OnUpdate; when called with this=&g_Player2, swaps
-    // input globals for the duration of that one OnUpdate call.
-    char p2i_env[8] = {};
-    if (GetEnvironmentVariableA("TH08_PLATFORM_P2_INPUT", p2i_env,
-                                static_cast<DWORD>(sizeof(p2i_env))) > 0 &&
-        p2i_env[0] == '1') {
-        th08_platform::log_line("phase 5d: TH08_PLATFORM_P2_INPUT=1, installing OnUpdate input-swap hook");
+    // Sub-phase 5d: per-player input routing.
+    if (multiplayer && env_flag("TH08_PLATFORM_P2_INPUT", true)) {
+        th08_platform::log_line("phase 5d: installing OnUpdate input-swap hook");
         const bool p2i_ok = th08_platform::state::p2_input::install_hook();
         th08_platform::log_line("phase 5d: p2_input install %s",
                                 p2i_ok ? "ok" : "FAILED");
     }
 
-    // Sub-phase 5f opt-in: per-player lives routing.
-    char p2l_env[8] = {};
-    if (GetEnvironmentVariableA("TH08_PLATFORM_P2_LIVES", p2l_env,
-                                static_cast<DWORD>(sizeof(p2l_env))) > 0 &&
-        p2l_env[0] == '1') {
-        th08_platform::log_line("phase 5f: TH08_PLATFORM_P2_LIVES=1, installing FUN_44CBF0+AddLives hooks");
+    // Sub-phase 5f: per-player lives routing.
+    if (multiplayer && env_flag("TH08_PLATFORM_P2_LIVES", true)) {
+        th08_platform::log_line("phase 5f: installing FUN_44CBF0+AddLives hooks");
         const bool p2l_ok = th08_platform::state::p2_lives::install_hook();
         th08_platform::log_line("phase 5f: p2_lives install %s",
                                 p2l_ok ? "ok" : "FAILED");
     }
 
-    // Sub-phase 5g opt-in: visual HUD for P2 via AsciiManager.
-    char hud_env[8] = {};
-    if (GetEnvironmentVariableA("TH08_PLATFORM_HUD", hud_env,
-                                static_cast<DWORD>(sizeof(hud_env))) > 0 &&
-        hud_env[0] == '1') {
-        th08_platform::log_line("phase 5g: TH08_PLATFORM_HUD=1, installing AsciiManager-based P2 HUD");
+    // Sub-phase 5g: visual HUD for P2 via AsciiManager.
+    if (multiplayer && env_flag("TH08_PLATFORM_HUD", true)) {
+        th08_platform::log_line("phase 5g: installing AsciiManager-based P2 HUD");
         const bool hud_ok = th08_platform::state::hud::install();
         th08_platform::log_line("phase 5g: hud install %s",
                                 hud_ok ? "ok" : "FAILED");
     }
 
-    // Sub-phase 5h opt-in: mirror hardcoded-g_Player calls to also
-    // fire for g_Player2. Without this, P2 renders + fires bullets
-    // visually but enemies don't take damage and P2 never gets hit.
-    char mirror_env[8] = {};
-    if (GetEnvironmentVariableA("TH08_PLATFORM_P2_MIRROR", mirror_env,
-                                static_cast<DWORD>(sizeof(mirror_env))) > 0 &&
-        mirror_env[0] == '1') {
-        th08_platform::log_line("phase 5h: TH08_PLATFORM_P2_MIRROR=1, installing 3 mirror hooks");
+    // Sub-phase 5h: mirror hardcoded-g_Player call sites for g_Player2.
+    if (multiplayer && env_flag("TH08_PLATFORM_P2_MIRROR", true)) {
+        th08_platform::log_line("phase 5h: installing 3 mirror hooks");
         const bool mirror_ok = th08_platform::state::p2_mirror::install();
         th08_platform::log_line("phase 5h: p2_mirror install %s",
                                 mirror_ok ? "ok" : "FAILED");

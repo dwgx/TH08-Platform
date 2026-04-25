@@ -132,6 +132,17 @@ bool IsConstructed() noexcept
     return g_constructed;
 }
 
+bool IsEligible() noexcept
+{
+    if (!g_constructed) {
+        return false;
+    }
+    // Player state byte at +0x0000. 0=alive, 1=spawning, 2=dead,
+    // 3=respawn-ghost, 4=respawn-related (per player_layout.h).
+    const std::uint8_t state = g_Player2[0];
+    return state != 2 && state != 3;
+}
+
 namespace {
 
 // Helper: write a function-pointer field at ChainElem + offset. Wrapped

@@ -103,22 +103,25 @@ int __fastcall hooked_RegisterChain(unsigned char arg)
     // Without this shift, BOTH players draw at the same world pos
     // and P2 is occluded by P1's sprite (= what user observed in
     // the runtime test).
+    // Default 80px shift so P2 isn't drawn on top of P1 at spawn.
+    // Override with TH08_PLATFORM_PLAYER2_X_OFFSET=N (set =0 to disable).
     char xoff_env[16] = {};
+    float shift = 80.0f;
     if (GetEnvironmentVariableA("TH08_PLATFORM_PLAYER2_X_OFFSET", xoff_env,
                                 static_cast<DWORD>(sizeof(xoff_env))) > 0) {
-        const float shift = static_cast<float>(atof(xoff_env));
-        if (shift != 0.0f) {
-            *reinterpret_cast<float*>(p2 + 0x2B4) += shift;          // pos.x
-            // Also nudge the hitbox AABB the same way so collision math
-            // sees the shifted position right away (the per-frame
-            // movement code in FUN_0044AEC0 will overwrite hitbox
-            // values from current pos, so this only matters for the
-            // first frame before that runs).
-            *reinterpret_cast<float*>(p2 + 0x3BC) += shift;
-            *reinterpret_cast<float*>(p2 + 0x3C8) += shift;
-            const float new_x = *reinterpret_cast<float*>(p2 + 0x2B4);
-            th08_platform::log_line("player2: shifted X by %.2f -> new pos.x=%.2f", shift, new_x);
-        }
+        shift = static_cast<float>(atof(xoff_env));
+    }
+    if (shift != 0.0f) {
+        *reinterpret_cast<float*>(p2 + 0x2B4) += shift;          // pos.x
+        // Also nudge the hitbox AABB the same way so collision math
+        // sees the shifted position right away (the per-frame
+        // movement code in FUN_0044AEC0 will overwrite hitbox
+        // values from current pos, so this only matters for the
+        // first frame before that runs).
+        *reinterpret_cast<float*>(p2 + 0x3BC) += shift;
+        *reinterpret_cast<float*>(p2 + 0x3C8) += shift;
+        const float new_x = *reinterpret_cast<float*>(p2 + 0x2B4);
+        th08_platform::log_line("player2: shifted X by %.2f -> new pos.x=%.2f", shift, new_x);
     }
     char yoff_env[16] = {};
     if (GetEnvironmentVariableA("TH08_PLATFORM_PLAYER2_Y_OFFSET", yoff_env,
@@ -171,7 +174,9 @@ bool install_player2_hook()
 
 void on_frame_tick(unsigned long long frame_no)
 {
-    static unsigned int log_interval = 0;
+    // Default 60-frame (= 1 second @ 60fps) tick log. Override with
+    // TH08_PLATFORM_PLAYER2_TICK_LOG=N (set =0 to disable diagnostic).
+    static unsigned int log_interval = 60;
     static bool initialized = false;
     if (!initialized) {
         initialized = true;
@@ -179,7 +184,7 @@ void on_frame_tick(unsigned long long frame_no)
         if (GetEnvironmentVariableA("TH08_PLATFORM_PLAYER2_TICK_LOG", env,
                                     static_cast<DWORD>(sizeof(env))) > 0) {
             int n = atoi(env);
-            log_interval = (n > 0) ? static_cast<unsigned int>(n) : 0;
+            log_interval = (n >= 0) ? static_cast<unsigned int>(n) : 60;
         }
     }
     if (log_interval == 0 || !g_player2_done) return;
@@ -229,8 +234,14 @@ void on_frame_tick(unsigned long long frame_no)
     const unsigned long long redirects =
         th08_platform::state::p2_lives::snapshot_redirect_count();
     th08_platform::log_line(
-        "HUD frame=%llu | P2 lives=%d | hits: p1=%llu p2=%llu (%llu test calls) | p2 deaths redirected=%llu",
-        frame_no, p2_lives, hits.p1_hits, hits.p2_hits, hits.total_calls, redirects);
+        "HUD frame=%llu | P2 lives=%d | redirs=%llu | calls: TH=%llu BB=%llu GZ=%llu LZ=%llu | "
+        "TH p1/p2=%llu/%llu | BB p1/p2=%llu/%llu | GZ p1/p2=%llu/%llu | LZ p1/p2=%llu/%llu",
+        frame_no, p2_lives, redirects,
+        hits.total_calls, hits.calls_44A230, hits.calls_44A470, hits.calls_laser,
+        hits.p1_hits, hits.p2_hits,
+        hits.p1_44A230_hits, hits.p2_44A230_hits,
+        hits.p1_44A470_grazes, hits.p2_44A470_grazes,
+        hits.p1_laser_hits, hits.p2_laser_hits);
 }
 
 void uninstall_player2_hook()
