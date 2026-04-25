@@ -18,12 +18,21 @@ namespace {
 // float* bullet_pos, int bullet_meta) -> int (2 = hit, 0 = miss).
 constexpr DWORD kTestHitboxRVA = 0x449ff0 - 0x400000;
 
+// Player death-trigger sub_44AB40 (verified this-aware via direct IDA
+// decomp). __thiscall(Player*) -> ptr. Writes state=2, plays death
+// anim+sfx at this+0x2B4, etc. Without manually calling this for
+// g_Player2 when 5c reports a P2 hit, BulletManager's caller never
+// triggers the death sequence (it only calls death code with
+// &g_Player baked in). End result: P2 absorbs hits silently.
+constexpr DWORD kPlayerDeathRVA = 0x44ab40 - 0x400000;
+
 // MSVC won't let us declare a detour function as `__thiscall`, so we
 // use `__fastcall` which has the same ABI for the first two args (ECX,
 // EDX). Original takes only one register arg (this in ECX), so EDX is
 // unused — we accept it as a placeholder param.
-using TestHitbox_t = int(__fastcall*)(void* this_, void* edx_unused,
-                                      float* bullet_pos, int bullet_meta);
+using TestHitbox_t   = int(__fastcall*)(void* this_, void* edx_unused,
+                                        float* bullet_pos, int bullet_meta);
+using PlayerDeath_t  = void*(__fastcall*)(void* this_, void* edx_unused);
 
 TestHitbox_t g_original = nullptr;
 
@@ -62,6 +71,26 @@ int __fastcall hooked_TestHitbox(void* this_, void* edx, float* bullet_pos, int 
     const int r2 = g_original(p2, edx, bullet_pos, bullet_meta);
     if (r2 == 2) {
         g_p2_hits.fetch_add(1, std::memory_order_relaxed);
+
+        // Manually trigger the death sequence on g_Player2. Without
+        // this, BulletManager's caller chain never knows P2 was the
+        // one hit (TestHitbox returns just an int). The chain calls
+        // death code with `&g_Player` baked in, so P2 absorbs hits
+        // silently (no state=2, no anim, no sfx). sub_44AB40 is
+        // this-aware: it sets state=2, plays the death anim at
+        // this+0x2B4 (pos), plays the sfx, and queues the respawn-init
+        // path that 5f's hook then routes to our P2 lives counter.
+        // Wrapped in SEH because we're calling into ZUN code with
+        // a non-canonical Player ptr (our DLL buffer).
+        auto* const trigger_death =
+            reinterpret_cast<PlayerDeath_t>(
+                reinterpret_cast<std::uintptr_t>(GetModuleHandleA(nullptr))
+                + kPlayerDeathRVA);
+        __try {
+            trigger_death(p2, nullptr);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            log_line("dual_collision: SEH during P2 death trigger; P2 may be in inconsistent state");
+        }
     }
     return r2;
 }
