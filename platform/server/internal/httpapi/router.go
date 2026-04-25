@@ -22,6 +22,7 @@ type Deps struct {
 	Auth   *AuthService
 	Users  *UsersService
 	Rooms  *RoomsService
+	Demo   *DemoService
 	// Friends, Groups, Channels, DMs, Lobby, Notifications, Games — add as they land
 }
 
@@ -52,6 +53,10 @@ func NewRouter(d *Deps) http.Handler {
 		// TODO: ping DB + Redis
 		w.Write([]byte("ready"))
 	})
+
+	// Public demo preview — landing page + read-only snapshot.
+	r.Get("/", Landing)
+	r.Get("/demo/snapshot", d.Demo.Snapshot)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// ── unauth ─────────────────────────────────────────────────

@@ -53,6 +53,7 @@ func main() {
 		Auth:   &httpapi.AuthService{DB: dbh, Signer: signer, Users: userSvc, UID: uidAlloc},
 		Users:  &httpapi.UsersService{DB: dbh, Users: userSvc},
 		Rooms:  &httpapi.RoomsService{DB: dbh},
+		Demo:   &httpapi.DemoService{DB: dbh},
 	}
 
 	srv := &http.Server{

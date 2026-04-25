@@ -1,0 +1,17 @@
+BEGIN;
+
+DELETE FROM match_history       WHERE room_id IN (SELECT id FROM rooms WHERE id::text LIKE '20000000-%');
+DELETE FROM notifications       WHERE user_uid IN (SELECT uid FROM users WHERE uid IN (10000,10001,10086,10324,10628,10720,11122,12345,33445,66666,88888));
+DELETE FROM lobby_messages      WHERE sender_uid IN (SELECT uid FROM users WHERE uid IN (10000,10001,10086,10324,10628,10720,11122,12345,33445,66666,88888));
+DELETE FROM room_members        WHERE room_id::text LIKE '20000000-%';
+DELETE FROM rooms               WHERE id::text LIKE '20000000-%';
+DELETE FROM group_messages      WHERE channel_id::text LIKE '10000000-%';
+DELETE FROM group_channels      WHERE group_id::text LIKE '00000000-0000-0000-0000-00000000000%';
+DELETE FROM group_members       WHERE group_id::text LIKE '00000000-0000-0000-0000-00000000000%';
+DELETE FROM groups              WHERE id::text LIKE '00000000-0000-0000-0000-00000000000%';
+DELETE FROM friendships         WHERE user_uid IN (10000,10001,10086,10324,10628,10720,11122,12345,33445,66666,88888);
+DELETE FROM users               WHERE uid IN (10000,10001,10086,10324,10628,10720,11122,12345,33445,66666,88888);
+
+DELETE FROM schema_migrations WHERE version = '0003_seed_demo';
+
+COMMIT;

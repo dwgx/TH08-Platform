@@ -262,6 +262,7 @@ VALUES (
     {"id":"sakuya_remilia","label_cn":"咲夜 & 蕾米","label_ja":"咲夜 & レミリア","label_en":"Sakuya & Remilia","color":"#5b7db8"},
     {"id":"youmu_yuyuko","label_cn":"妖梦 & 幽幽子","label_ja":"妖夢 & 幽々子","label_en":"Youmu & Yuyuko","color":"#9dc29a"}
   ]'::jsonb,
+  '0.1.0',
   'alpha'
 ) ON CONFLICT (id) DO NOTHING;
 
