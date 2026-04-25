@@ -1,5 +1,6 @@
 #include "game_loop.h"
 #include "../logging.h"
+#include "../state/frame_state.h"
 
 #include <windows.h>
 #include <MinHook.h>
@@ -28,9 +29,16 @@ std::atomic<uint64_t> g_frame_count{0};
 int __fastcall hooked_OnUpdate(void* gm)
 {
     const auto f = g_frame_count.fetch_add(1, std::memory_order_relaxed) + 1;
+    static th08_platform::state::FrameState g_current_frame_state;
+    th08_platform::state::capture(g_current_frame_state, f);
     if (f % 60 == 0) {
         th08_platform::log_line("GameManager::OnUpdate tick: frame %llu",
                                 static_cast<unsigned long long>(f));
+        th08_platform::log_line(
+            "captured: %llu bytes across %zu regions",
+            static_cast<unsigned long long>(
+                th08_platform::state::total_payload_bytes(g_current_frame_state)),
+            g_current_frame_state.regions.size());
     }
     return g_original_OnUpdate(gm);
 }
