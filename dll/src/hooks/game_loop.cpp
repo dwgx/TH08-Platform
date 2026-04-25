@@ -2,6 +2,7 @@
 #include "../logging.h"
 #include "../net/rollback.h"
 #include "../state/player2_hook.h"
+#include "../state/hud.h"
 
 #include <windows.h>
 #include <MinHook.h>
@@ -32,6 +33,10 @@ int __fastcall hooked_OnUpdate(void* gm)
     const auto f = g_frame_count.fetch_add(1, std::memory_order_relaxed) + 1;
     th08_platform::net::rollback::on_frame_start(f);
     th08_platform::state::on_frame_tick(static_cast<unsigned long long>(f));
+    // Phase 5g: queue P2 stats into AsciiManager BEFORE original
+    // GameManager::OnUpdate runs so they're rendered by AsciiManager's
+    // OnDrawHighPrio later in the same frame's draw chain.
+    th08_platform::state::hud::enqueue_p2_strings();
     if (f % 60 == 0) {
         th08_platform::log_line("GameManager::OnUpdate tick: frame %llu",
                                 static_cast<unsigned long long>(f));

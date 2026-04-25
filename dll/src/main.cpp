@@ -16,6 +16,7 @@
 #include "state/dual_collision.h"
 #include "state/p2_input.h"
 #include "state/p2_lives.h"
+#include "state/hud.h"
 
 namespace {
 std::uint16_t read_listen_port()
@@ -158,6 +159,17 @@ DWORD WINAPI dll_init_thread(LPVOID)
                                 p2l_ok ? "ok" : "FAILED");
     }
 
+    // Sub-phase 5g opt-in: visual HUD for P2 via AsciiManager.
+    char hud_env[8] = {};
+    if (GetEnvironmentVariableA("TH08_PLATFORM_HUD", hud_env,
+                                static_cast<DWORD>(sizeof(hud_env))) > 0 &&
+        hud_env[0] == '1') {
+        th08_platform::log_line("phase 5g: TH08_PLATFORM_HUD=1, installing AsciiManager-based P2 HUD");
+        const bool hud_ok = th08_platform::state::hud::install();
+        th08_platform::log_line("phase 5g: hud install %s",
+                                hud_ok ? "ok" : "FAILED");
+    }
+
     if (game_loop_ok && input_ok && rollback_audio_ok && net_ok) {
         th08_platform::log_line("phase 4 ready");
     } else if (!game_loop_ok) {
@@ -180,6 +192,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID /*reserved*/)
         CreateThread(nullptr, 0, dll_init_thread, nullptr, 0, nullptr);
         break;
     case DLL_PROCESS_DETACH:
+        th08_platform::state::hud::uninstall();
         th08_platform::state::p2_lives::uninstall_hook();
         th08_platform::state::p2_input::uninstall_hook();
         th08_platform::state::dual_collision::uninstall_hook();
