@@ -17,6 +17,8 @@ struct Counters {
     unsigned long long routed_p2;
     unsigned long long attracted_p1;
     unsigned long long attracted_p2;
+    unsigned long long trigger_p1;
+    unsigned long long trigger_p2;
 };
 
 Counters snapshot_counters();

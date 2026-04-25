@@ -238,7 +238,7 @@ void on_frame_tick(unsigned long long frame_no)
     th08_platform::log_line(
         "HUD frame=%llu | P2 lives=%d | redirs=%llu | calls: TH=%llu BB=%llu GZ=%llu LZ=%llu | "
         "TH p1/p2=%llu/%llu | BB p1/p2=%llu/%llu | GZ p1/p2=%llu/%llu | LZ p1/p2=%llu/%llu | "
-        "IT p1/p2=%llu/%llu calls=%llu | IA p1/p2=%llu/%llu",
+        "IT p1/p2=%llu/%llu calls=%llu | IA p1/p2=%llu/%llu | AT p1/p2=%llu/%llu",
         frame_no, p2_lives, redirects,
         hits.total_calls, hits.calls_44A230, hits.calls_44A470, hits.calls_laser,
         hits.p1_hits, hits.p2_hits,
@@ -246,7 +246,8 @@ void on_frame_tick(unsigned long long frame_no)
         hits.p1_44A470_grazes, hits.p2_44A470_grazes,
         hits.p1_laser_hits, hits.p2_laser_hits,
         items.routed_p1, items.routed_p2, items.routed_calls,
-        items.attracted_p1, items.attracted_p2);
+        items.attracted_p1, items.attracted_p2,
+        items.trigger_p1, items.trigger_p2);
 }
 
 void uninstall_player2_hook()
