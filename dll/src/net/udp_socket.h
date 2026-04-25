@@ -11,7 +11,7 @@ namespace th08_platform::net {
 struct UdpDatagram {
     sockaddr_in from{};
     int size = 0;
-    std::array<std::uint8_t, 16> bytes{};
+    std::array<std::uint8_t, 64> bytes{};
 };
 
 class UdpSocket {

@@ -10,6 +10,7 @@
 #include "hooks/game_loop.h"
 #include "hooks/input.h"
 #include "net/lockstep.h"
+#include "net/rollback.h"
 
 namespace {
 std::uint16_t read_listen_port()
@@ -31,10 +32,31 @@ std::uint16_t read_listen_port()
     return static_cast<std::uint16_t>(port);
 }
 
+std::uint32_t read_fake_rtt_ms()
+{
+    char value[32] = {};
+    if (GetEnvironmentVariableA("TH08_PLATFORM_FAKE_RTT_MS", value,
+                                static_cast<DWORD>(sizeof(value))) == 0) {
+        return 0;
+    }
+
+    char* end = nullptr;
+    const unsigned long delay = std::strtoul(value, &end, 10);
+    if (!end || *end != '\0') {
+        th08_platform::log_line("invalid TH08_PLATFORM_FAKE_RTT_MS='%s', defaulting to 0",
+                                value);
+        return 0;
+    }
+
+    return static_cast<std::uint32_t>(delay);
+}
+
 DWORD WINAPI dll_init_thread(LPVOID)
 {
     th08_platform::log_init();
     th08_platform::log_line("th08_platform.dll attached; starting hooks");
+    th08_platform::net::set_fake_rtt_ms(read_fake_rtt_ms());
+    th08_platform::net::rollback::reset();
 
     char peer_spec[64] = {};
     const DWORD peer_len = GetEnvironmentVariableA("TH08_PLATFORM_PEER", peer_spec,
@@ -44,17 +66,21 @@ DWORD WINAPI dll_init_thread(LPVOID)
 
     const bool game_loop_ok = th08_platform::hooks::install_game_loop_hook();
     const bool input_ok = game_loop_ok && th08_platform::hooks::install_input_hook();
+    const bool rollback_audio_ok =
+        input_ok && th08_platform::net::rollback::install_audio_hooks();
 
     if (peer_len != 0 && !net_ok) {
-        th08_platform::log_line("phase 3 lockstep init failed; staying observation-only");
+        th08_platform::log_line("phase 4 net init failed; staying local-only");
     }
 
-    if (game_loop_ok && input_ok && net_ok) {
-        th08_platform::log_line("phase 3 ready");
+    if (game_loop_ok && input_ok && rollback_audio_ok && net_ok) {
+        th08_platform::log_line("phase 4 ready");
     } else if (!game_loop_ok) {
-        th08_platform::log_line("phase 3 game loop hook install failed");
+        th08_platform::log_line("phase 4 game loop hook install failed");
     } else if (!input_ok) {
-        th08_platform::log_line("phase 3 input hook install failed");
+        th08_platform::log_line("phase 4 input hook install failed");
+    } else if (!rollback_audio_ok) {
+        th08_platform::log_line("phase 4 audio hook install failed");
     }
     return 0;
 }

@@ -42,6 +42,8 @@ add_library(th08_platform SHARED
     src/hooks/input.cpp
     src/net/udp_socket.cpp
     src/net/lockstep.cpp
+    src/net/fake_rtt.cpp
+    src/net/rollback.cpp
     src/state/frame_state.cpp
     src/state/heap_journal.cpp
 )

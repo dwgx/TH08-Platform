@@ -1,6 +1,7 @@
 #include "lockstep.h"
 
 #include "../logging.h"
+#include "fake_rtt.h"
 #include "udp_socket.h"
 
 #include <winsock2.h>
@@ -26,8 +27,8 @@ constexpr std::uint8_t kFlagHandshake = 1u << 0;
 constexpr std::uint8_t kFlagDisconnect = 1u << 1;
 constexpr DWORD kHandshakeWaitMs = 5000;
 constexpr DWORD kHandshakeRetryMs = 250;
-constexpr int kDisconnectTimeoutCount = 10;
 constexpr std::uint32_t kMaxFrameLag = 10;
+constexpr ULONGLONG kDisconnectTimeoutMs = 2000;
 
 enum class ConnectionState {
     Disabled,
@@ -39,6 +40,7 @@ struct Packet {
     std::uint8_t flags = 0;
     std::uint32_t frame = 0;
     std::uint16_t input = 0;
+    std::uint32_t checksum = 0;
 };
 
 struct LockstepState {
@@ -50,9 +52,9 @@ struct LockstepState {
     UdpSocket socket;
     sockaddr_in peer_addr{};
     std::string peer_label;
-    std::map<std::uint32_t, std::uint16_t> peer_inputs;
+    std::map<std::uint32_t, ConfirmedFrame> peer_frames;
     std::uint16_t last_known_input = 0;
-    int consecutive_timeouts = 0;
+    ULONGLONG last_receive_tick = 0;
 };
 
 LockstepState g_state;
@@ -139,9 +141,9 @@ bool parse_peer_spec(const char* peer_spec, sockaddr_in& out_addr, std::string& 
     return true;
 }
 
-std::array<std::uint8_t, 16> encode_packet(const Packet& packet)
+std::array<std::uint8_t, 20> encode_packet(const Packet& packet)
 {
-    std::array<std::uint8_t, 16> raw{};
+    std::array<std::uint8_t, 20> raw{};
     std::memcpy(raw.data(), kMagic.data(), kMagic.size());
     raw[4] = kVersion;
     raw[5] = packet.flags;
@@ -149,12 +151,13 @@ std::array<std::uint8_t, 16> encode_packet(const Packet& packet)
     store_u32(raw.data() + 8, packet.frame);
     store_u16(raw.data() + 12, packet.input);
     store_u16(raw.data() + 14, 0);
+    store_u32(raw.data() + 16, packet.checksum);
     return raw;
 }
 
 bool decode_packet(const UdpDatagram& datagram, Packet& out_packet)
 {
-    if (datagram.size != 16) {
+    if (datagram.size != 20) {
         return false;
     }
     if (std::memcmp(datagram.bytes.data(), kMagic.data(), kMagic.size()) != 0) {
@@ -167,31 +170,32 @@ bool decode_packet(const UdpDatagram& datagram, Packet& out_packet)
     out_packet.flags = datagram.bytes[5];
     out_packet.frame = load_u32(datagram.bytes.data() + 8);
     out_packet.input = load_u16(datagram.bytes.data() + 12);
+    out_packet.checksum = load_u32(datagram.bytes.data() + 16);
     return true;
 }
 
 bool send_packet_locked(const Packet& packet)
 {
     const auto raw = encode_packet(packet);
-    return g_state.socket.send(g_state.peer_addr, raw.data(),
-                               static_cast<int>(raw.size()));
+    return fake_rtt::send_or_queue(g_state.socket, g_state.peer_addr, raw.data(),
+                                   static_cast<int>(raw.size()));
 }
 
 void mark_connected_locked()
 {
     if (g_state.connection != ConnectionState::Connected) {
         g_state.connection = ConnectionState::Connected;
-        g_state.consecutive_timeouts = 0;
+        g_state.last_receive_tick = ::GetTickCount64();
         th08_platform::log_line("peer connected at %s", g_state.peer_label.c_str());
     }
 }
 
 void drop_stale_frames_locked(std::uint32_t current_frame)
 {
-    for (auto it = g_state.peer_inputs.begin(); it != g_state.peer_inputs.end();) {
+    for (auto it = g_state.peer_frames.begin(); it != g_state.peer_frames.end();) {
         const std::uint32_t frame = it->first;
         if (frame + kMaxFrameLag < current_frame) {
-            it = g_state.peer_inputs.erase(it);
+            it = g_state.peer_frames.erase(it);
         } else {
             ++it;
         }
@@ -204,8 +208,8 @@ void fall_back_to_solo_locked(const char* reason)
         th08_platform::log_line("%s", reason);
     }
     g_state.connection = ConnectionState::Solo;
-    g_state.peer_inputs.clear();
-    g_state.consecutive_timeouts = 0;
+    g_state.peer_frames.clear();
+    g_state.last_receive_tick = 0;
 }
 
 void handle_packet_locked(const Packet& packet, const sockaddr_in& from)
@@ -228,9 +232,13 @@ void handle_packet_locked(const Packet& packet, const sockaddr_in& from)
     }
 
     if ((packet.flags & kFlagHandshake) == 0 && g_state.connection == ConnectionState::Connected) {
-        g_state.peer_inputs[packet.frame] = packet.input;
+        g_state.peer_frames[packet.frame] = ConfirmedFrame{
+            .frame = packet.frame,
+            .input = packet.input,
+            .checksum = packet.checksum,
+        };
         g_state.last_known_input = packet.input;
-        g_state.consecutive_timeouts = 0;
+        g_state.last_receive_tick = ::GetTickCount64();
     }
 }
 
@@ -240,9 +248,16 @@ void pump_locked(int timeout_ms)
         return;
     }
 
+    fake_rtt::drain(g_state.socket);
+
     while (true) {
         const auto datagram = g_state.socket.recv(timeout_ms);
         if (!datagram.has_value()) {
+            if (g_state.connection == ConnectionState::Connected &&
+                g_state.last_receive_tick != 0 &&
+                (::GetTickCount64() - g_state.last_receive_tick) >= kDisconnectTimeoutMs) {
+                fall_back_to_solo_locked("peer disconnected, falling back to solo");
+            }
             return;
         }
 
@@ -312,9 +327,9 @@ bool initialize(const char* peer_spec, std::uint16_t listen_port)
     g_state.connection = ConnectionState::Solo;
     g_state.peer_addr = peer_addr;
     g_state.peer_label = peer_label;
-    g_state.peer_inputs.clear();
+    g_state.peer_frames.clear();
     g_state.last_known_input = 0;
-    g_state.consecutive_timeouts = 0;
+    g_state.last_receive_tick = 0;
 
     if (!wait_for_handshake_locked(kHandshakeWaitMs)) {
         th08_platform::log_line("peer never appeared, running solo");
@@ -336,17 +351,24 @@ void shutdown()
     }
 
     g_state.socket.close();
-    g_state.peer_inputs.clear();
+    g_state.peer_frames.clear();
     g_state.peer_label.clear();
     g_state.configured = false;
     g_state.connection = ConnectionState::Disabled;
     g_state.last_known_input = 0;
-    g_state.consecutive_timeouts = 0;
+    g_state.last_receive_tick = 0;
+    fake_rtt::shutdown();
 
     if (g_state.wsa_ready) {
         ::WSACleanup();
         g_state.wsa_ready = false;
     }
+}
+
+void set_fake_rtt_ms(std::uint32_t fake_rtt_ms)
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    fake_rtt::configure(fake_rtt_ms);
 }
 
 bool is_configured()
@@ -367,7 +389,7 @@ void poll()
     pump_locked(0);
 }
 
-void send_local_input(std::uint64_t frame, std::uint16_t input)
+void send_local_input(std::uint64_t frame, std::uint16_t input, std::uint32_t checksum)
 {
     std::lock_guard<std::mutex> lock(g_state.mutex);
 
@@ -379,13 +401,15 @@ void send_local_input(std::uint64_t frame, std::uint16_t input)
             .flags = 0,
             .frame = static_cast<std::uint32_t>(frame),
             .input = input,
+            .checksum = checksum,
         })) {
         th08_platform::log_line("lockstep send failed to %s", g_state.peer_label.c_str());
     }
+
+    pump_locked(0);
 }
 
-std::optional<std::uint16_t> wait_for_peer_input(std::uint64_t frame,
-                                                 std::uint32_t timeout_ms)
+std::optional<ConfirmedFrame> peek_confirmed_frame(std::uint64_t frame)
 {
     std::lock_guard<std::mutex> lock(g_state.mutex);
 
@@ -393,38 +417,47 @@ std::optional<std::uint16_t> wait_for_peer_input(std::uint64_t frame,
         return std::nullopt;
     }
 
+    pump_locked(0);
+
     const auto target_frame = static_cast<std::uint32_t>(frame);
-    drop_stale_frames_locked(target_frame);
-
-    if (const auto found = g_state.peer_inputs.find(target_frame);
-        found != g_state.peer_inputs.end()) {
-        const auto value = found->second;
-        g_state.peer_inputs.erase(found);
-        return value;
-    }
-
-    const ULONGLONG start = ::GetTickCount64();
-    while (::GetTickCount64() - start < timeout_ms) {
-        pump_locked(20);
-
-        if (g_state.connection != ConnectionState::Connected) {
-            return std::nullopt;
-        }
-
-        if (const auto found = g_state.peer_inputs.find(target_frame);
-            found != g_state.peer_inputs.end()) {
-            const auto value = found->second;
-            g_state.peer_inputs.erase(found);
-            return value;
-        }
-    }
-
-    ++g_state.consecutive_timeouts;
-    if (g_state.consecutive_timeouts >= kDisconnectTimeoutCount) {
-        fall_back_to_solo_locked("peer disconnected, falling back to solo");
+    if (const auto found = g_state.peer_frames.find(target_frame);
+        found != g_state.peer_frames.end()) {
+        return found->second;
     }
 
     return std::nullopt;
+}
+
+std::vector<ConfirmedFrame> consume_confirmed_frames_up_to(std::uint64_t frame)
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    std::vector<ConfirmedFrame> confirmed_frames;
+
+    if (g_state.connection != ConnectionState::Connected) {
+        return confirmed_frames;
+    }
+
+    pump_locked(0);
+
+    const auto target_frame = static_cast<std::uint32_t>(frame);
+    drop_stale_frames_locked(target_frame);
+
+    for (auto it = g_state.peer_frames.begin(); it != g_state.peer_frames.end();) {
+        if (it->first <= target_frame) {
+            confirmed_frames.push_back(it->second);
+            it = g_state.peer_frames.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    return confirmed_frames;
+}
+
+std::uint16_t last_known_remote_input()
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    return g_state.last_known_input;
 }
 
 }  // namespace th08_platform::net
