@@ -61,6 +61,26 @@ int __fastcall hooked_RegisterChain(unsigned char arg)
     g_player2_done = true;
     th08_platform::log_line("player2_hook: g_Player2 fully wired (ctor + chain)");
 
+    // Sub-phase 5h fix for bombs (codex 5.5 round-2 RE):
+    // sub_44C650's bomb logic dispatches via a function-pointer table
+    // at this+0x1000 (5 entries, indexed by bomb type). For g_Player
+    // this table is populated by ZUN's init code AFTER AddedCallback;
+    // for our g_Player2 (also AddedCallback'd) the SAME init runs but
+    // it might key off character data we don't fully replicate. The
+    // safe shortcut: snapshot g_Player's table now (after BOTH
+    // AddedCallbacks have run) and copy it to g_Player2.
+    {
+        auto* const p1_tab = reinterpret_cast<void**>(
+            globals::kAddr_g_Player + 0x1000);
+        auto* const p2_tab = reinterpret_cast<void**>(
+            reinterpret_cast<std::uintptr_t>(th08_platform::player2::g_Player2) + 0x1000);
+        for (int i = 0; i < 5; ++i) {
+            p2_tab[i] = p1_tab[i];
+        }
+        th08_platform::log_line("player2: copied bomb-handler table 0x1000..0x1014 from g_Player to g_Player2 (entries: %p %p %p %p %p)",
+                                p1_tab[0], p1_tab[1], p1_tab[2], p1_tab[3], p1_tab[4]);
+    }
+
     // Post-Register diagnostic: did Chain::AddToCalcChain auto-call
     // Player::AddedCallback? If yes, playerState should be 1
     // (PLAYER_STATE_SPAWNING) since AddedCallback writes that. If still

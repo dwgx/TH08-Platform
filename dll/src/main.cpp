@@ -17,6 +17,7 @@
 #include "state/p2_input.h"
 #include "state/p2_lives.h"
 #include "state/hud.h"
+#include "state/p2_mirror.h"
 
 namespace {
 std::uint16_t read_listen_port()
@@ -170,6 +171,19 @@ DWORD WINAPI dll_init_thread(LPVOID)
                                 hud_ok ? "ok" : "FAILED");
     }
 
+    // Sub-phase 5h opt-in: mirror hardcoded-g_Player calls to also
+    // fire for g_Player2. Without this, P2 renders + fires bullets
+    // visually but enemies don't take damage and P2 never gets hit.
+    char mirror_env[8] = {};
+    if (GetEnvironmentVariableA("TH08_PLATFORM_P2_MIRROR", mirror_env,
+                                static_cast<DWORD>(sizeof(mirror_env))) > 0 &&
+        mirror_env[0] == '1') {
+        th08_platform::log_line("phase 5h: TH08_PLATFORM_P2_MIRROR=1, installing 3 mirror hooks");
+        const bool mirror_ok = th08_platform::state::p2_mirror::install();
+        th08_platform::log_line("phase 5h: p2_mirror install %s",
+                                mirror_ok ? "ok" : "FAILED");
+    }
+
     if (game_loop_ok && input_ok && rollback_audio_ok && net_ok) {
         th08_platform::log_line("phase 4 ready");
     } else if (!game_loop_ok) {
@@ -192,6 +206,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID /*reserved*/)
         CreateThread(nullptr, 0, dll_init_thread, nullptr, 0, nullptr);
         break;
     case DLL_PROCESS_DETACH:
+        th08_platform::state::p2_mirror::uninstall();
         th08_platform::state::hud::uninstall();
         th08_platform::state::p2_lives::uninstall_hook();
         th08_platform::state::p2_input::uninstall_hook();
