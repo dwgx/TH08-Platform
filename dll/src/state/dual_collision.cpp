@@ -37,8 +37,17 @@ constexpr DWORD kPlayerDeathRVA = 0x44ab40 - 0x400000;
 using TestHitbox_t   = int(__fastcall*)(void* this_, void* edx_unused,
                                         float* bullet_pos, int bullet_meta);
 using PlayerDeath_t  = void*(__fastcall*)(void* this_, void* edx_unused);
-using BulletBody_t    = int(__fastcall*)(void* this_, void* edx_unused, void* bullet);
-using BulletGraze_t   = int(__fastcall*)(void* this_, void* edx_unused, void* bullet);
+// sub_44A230 / sub_44A470 are __thiscall(Player*, float* a2, float* a3) per
+// IDA hex-rays decompile @ 0x44A230 / 0x44A470. Caller (BulletManager state-1
+// loop @ 0x4316B1) pushes BOTH a2 (bullet+0xD44) and a3 (bullet+0xD34). Earlier
+// trampolines passed only ONE stack arg; this caused the original to read a3
+// from garbage stack data and SEH on `*a3`. Counter for those SEH errors was
+// at 18+/sec around heavy bullet frames in the user's runtime test, dropping
+// fps from 60 to 30 because every state-1 bullet hit-test entered SEH.
+using BulletBody_t    = int(__fastcall*)(void* this_, void* edx_unused,
+                                         float* a2, float* a3);
+using BulletGraze_t   = int(__fastcall*)(void* this_, void* edx_unused,
+                                         float* a2, float* a3);
 using LaserHitbox_t   = int(__fastcall*)(void* this_, void* edx_unused,
                                          float* laser_pos, int meta,
                                          float* laser_size, float angle,
@@ -126,10 +135,11 @@ bool call_test_hitbox(void* this_, void* edx, float* bullet_pos, int bullet_meta
     }
 }
 
-bool call_bullet_body(void* this_, void* edx, void* bullet, int* out_result) noexcept
+bool call_bullet_body(void* this_, void* edx, float* a2, float* a3,
+                      int* out_result) noexcept
 {
     __try {
-        *out_result = g_orig_bullet_body(this_, edx, bullet);
+        *out_result = g_orig_bullet_body(this_, edx, a2, a3);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         log_line("dual_collision: SEH in sub_44A230 original (this=%p)", this_);
@@ -138,10 +148,11 @@ bool call_bullet_body(void* this_, void* edx, void* bullet, int* out_result) noe
     }
 }
 
-bool call_bullet_graze(void* this_, void* edx, void* bullet, int* out_result) noexcept
+bool call_bullet_graze(void* this_, void* edx, float* a2, float* a3,
+                       int* out_result) noexcept
 {
     __try {
-        *out_result = g_orig_bullet_graze(this_, edx, bullet);
+        *out_result = g_orig_bullet_graze(this_, edx, a2, a3);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         log_line("dual_collision: SEH in sub_44A470 original (this=%p)", this_);
@@ -226,12 +237,12 @@ int __fastcall hooked_TestHitbox(void* this_, void* edx, float* bullet_pos, int 
     return (r1 == 2 || r2 == 2) ? 2 : r1;
 }
 
-int __fastcall hooked_44A230(void* this_, void* edx, void* bullet)
+int __fastcall hooked_44A230(void* this_, void* edx, float* a2, float* a3)
 {
     g_calls_44A230.fetch_add(1, std::memory_order_relaxed);
     WrapperMirrorGuard guard;  // suppresses nested TestHitbox mirror
     int r1 = 0;
-    if (!call_bullet_body(this_, edx, bullet, &r1)) {
+    if (!call_bullet_body(this_, edx, a2, a3, &r1)) {
         return 0;
     }
     if (is_p1(this_) && r1 != 0) {
@@ -242,7 +253,7 @@ int __fastcall hooked_44A230(void* this_, void* edx, void* bullet)
     }
 
     int r2 = 0;
-    call_bullet_body(p2(), edx, bullet, &r2);
+    call_bullet_body(p2(), edx, a2, a3, &r2);
     if (r2 != 0) {
         g_44A230_p2_hits.fetch_add(1, std::memory_order_relaxed);
     }
@@ -252,12 +263,12 @@ int __fastcall hooked_44A230(void* this_, void* edx, void* bullet)
 // Graze policy is intentionally naive: each eligible player who grazes the
 // projectile gets the vanilla sub_44A930 side effects from the original call.
 // No per-projectile dedup is applied.
-int __fastcall hooked_44A470(void* this_, void* edx, void* bullet)
+int __fastcall hooked_44A470(void* this_, void* edx, float* a2, float* a3)
 {
     g_calls_44A470.fetch_add(1, std::memory_order_relaxed);
     WrapperMirrorGuard guard;
     int r1 = 0;
-    if (!call_bullet_graze(this_, edx, bullet, &r1)) {
+    if (!call_bullet_graze(this_, edx, a2, a3, &r1)) {
         return 0;
     }
     if (is_p1(this_) && r1 == 1) {
@@ -268,7 +279,7 @@ int __fastcall hooked_44A470(void* this_, void* edx, void* bullet)
     }
 
     int r2 = 0;
-    call_bullet_graze(p2(), edx, bullet, &r2);
+    call_bullet_graze(p2(), edx, a2, a3, &r2);
     if (r2 == 1) {
         g_44A470_p2_grazes.fetch_add(1, std::memory_order_relaxed);
     }
