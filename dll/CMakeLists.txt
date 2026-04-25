@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(th08_platform LANGUAGES CXX)
+project(th08_platform LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,13 +24,26 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(minhook)
 
+# MinHook v1.3.3 ships no CMakeLists, so define the static lib ourselves
+add_library(minhook STATIC
+    ${minhook_SOURCE_DIR}/src/buffer.c
+    ${minhook_SOURCE_DIR}/src/hook.c
+    ${minhook_SOURCE_DIR}/src/trampoline.c
+    ${minhook_SOURCE_DIR}/src/hde/hde32.c
+    ${minhook_SOURCE_DIR}/src/hde/hde64.c
+)
+target_include_directories(minhook PUBLIC ${minhook_SOURCE_DIR}/include)
+
 # ==== th08_platform.dll ====
 add_library(th08_platform SHARED
     src/main.cpp
     src/logging.cpp
     src/hooks/game_loop.cpp
 )
-target_include_directories(th08_platform PRIVATE src)
+target_include_directories(th08_platform PRIVATE
+    src
+    ${minhook_SOURCE_DIR}/include
+)
 target_link_libraries(th08_platform PRIVATE minhook)
 target_compile_definitions(th08_platform PRIVATE
     WIN32_LEAN_AND_MEAN
