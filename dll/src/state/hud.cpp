@@ -80,33 +80,27 @@ void enqueue_p2_strings()
     // SEH-wrap because we're calling ZUN code with our own args; if the
     // AddString queue is full or anything goes weird, don't take down
     // the game.
+    //
+    // Layout: place 2 compact rows ABOVE FPS and BELOW the 東方永夜抄
+    // logo so we don't overlap. The logo art sits roughly y=290..420.
+    // FPS displays at y~460. Use y=440-455 for our P2 strip.
     __try {
-        char buf[64];
+        char buf[80];
 
-        // Line 1: "P2 LIVES: N"
-        Vec3 pos1 = {424.0f, 360.0f, 0.0f};
-        std::snprintf(buf, sizeof(buf), "P2 LIVES %d", p2_lives);
+        // Row 1 at y=440: "P2 *N st HHHH"   (lives + state + hit count)
+        Vec3 pos1 = {424.0f, 440.0f, 0.0f};
+        const char* state_name =
+            p2_state == 0 ? "AL" :  // ALive
+            p2_state == 1 ? "SP" :  // SPawn
+            p2_state == 2 ? "DD" :  // DeaD
+            p2_state == 3 ? "GH" : "??";  // GHost
+        std::snprintf(buf, sizeof(buf), "P2 *%d %s h%llu", p2_lives, state_name, hits.p2_hits);
         g_AddString(ascii, nullptr, &pos1.x, buf);
 
-        // Line 2: "P2 STATE: S" (0=alive, 1=spawning, 2=dead, 3=ghost)
-        Vec3 pos2 = {424.0f, 380.0f, 0.0f};
-        const char* state_name =
-            p2_state == 0 ? "alive" :
-            p2_state == 1 ? "spawn" :
-            p2_state == 2 ? "DEAD"  :
-            p2_state == 3 ? "ghost" : "?";
-        std::snprintf(buf, sizeof(buf), "P2 ST %s", state_name);
-        g_AddString(ascii, nullptr, &pos2.x, buf);
-
-        // Line 3: "P2 HITS: N" (since session start)
-        Vec3 pos3 = {424.0f, 400.0f, 0.0f};
-        std::snprintf(buf, sizeof(buf), "P2 HITS %llu", hits.p2_hits);
-        g_AddString(ascii, nullptr, &pos3.x, buf);
-
-        // Line 4: P2 position
-        Vec3 pos4 = {424.0f, 420.0f, 0.0f};
+        // Row 2 at y=455: "P2 @ X,Y"
+        Vec3 pos2 = {424.0f, 455.0f, 0.0f};
         std::snprintf(buf, sizeof(buf), "P2 @ %.0f,%.0f", pos_x, pos_y);
-        g_AddString(ascii, nullptr, &pos4.x, buf);
+        g_AddString(ascii, nullptr, &pos2.x, buf);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         log_line("hud: SEH during AddString; disabling HUD for safety");
         g_enabled = false;
