@@ -50,6 +50,7 @@ add_library(th08_platform SHARED
     src/state/player2_hook.cpp
     src/state/dual_collision.cpp
     src/state/p2_input.cpp
+    src/state/p2_lives.cpp
 )
 target_include_directories(th08_platform PRIVATE
     src

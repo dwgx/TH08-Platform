@@ -15,6 +15,7 @@
 #include "state/player2_hook.h"
 #include "state/dual_collision.h"
 #include "state/p2_input.h"
+#include "state/p2_lives.h"
 
 namespace {
 std::uint16_t read_listen_port()
@@ -146,6 +147,17 @@ DWORD WINAPI dll_init_thread(LPVOID)
                                 p2i_ok ? "ok" : "FAILED");
     }
 
+    // Sub-phase 5f opt-in: per-player lives routing.
+    char p2l_env[8] = {};
+    if (GetEnvironmentVariableA("TH08_PLATFORM_P2_LIVES", p2l_env,
+                                static_cast<DWORD>(sizeof(p2l_env))) > 0 &&
+        p2l_env[0] == '1') {
+        th08_platform::log_line("phase 5f: TH08_PLATFORM_P2_LIVES=1, installing FUN_44CBF0+AddLives hooks");
+        const bool p2l_ok = th08_platform::state::p2_lives::install_hook();
+        th08_platform::log_line("phase 5f: p2_lives install %s",
+                                p2l_ok ? "ok" : "FAILED");
+    }
+
     if (game_loop_ok && input_ok && rollback_audio_ok && net_ok) {
         th08_platform::log_line("phase 4 ready");
     } else if (!game_loop_ok) {
@@ -168,6 +180,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID /*reserved*/)
         CreateThread(nullptr, 0, dll_init_thread, nullptr, 0, nullptr);
         break;
     case DLL_PROCESS_DETACH:
+        th08_platform::state::p2_lives::uninstall_hook();
         th08_platform::state::p2_input::uninstall_hook();
         th08_platform::state::dual_collision::uninstall_hook();
         th08_platform::state::uninstall_player2_hook();

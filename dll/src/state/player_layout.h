@@ -34,6 +34,18 @@ inline constexpr std::size_t kOff_anmVmInline                = 0x0010;  // AnmVm
 inline constexpr std::size_t kOff_shtBuf1                    = 0x0400;  // 20 bytes from &off_4C7AD0[10*characterIdx]
 inline constexpr std::size_t kOff_shtBuf2                    = 0x0405;  // overlap by design (5-byte stride, ZUN packing)
 
+// Live world position (verified by codex 5e batch via Player::FUN_0044d420
+// boundary clamp at 0x44D420 and Player::Player ctor's `unknown_libname_1
+// (this+692)` D3DXVECTOR3 init):
+inline constexpr std::size_t kOff_pos_x                      = 0x02B4;  // float - read by FUN_0044AEC0 movement code
+inline constexpr std::size_t kOff_pos_y                      = 0x02B8;  // float
+inline constexpr std::size_t kOff_pos_z                      = 0x02BC;  // float (likely; D3DXVECTOR3)
+
+// Per-frame movement direction stored at +0xE2A98 (=+232090 dword)
+// (verified codex 5e puzzle 2: Player::FUN_0044AEC0 line ~0x44AF82
+// decodes g_CurFrameInput bits and writes 0/1/2/3/4 here):
+inline constexpr std::size_t kOff_moveDirection              = 0xE2A98;  // i32 (0=none, 1=up, 2=down, 3=left, 4=right)
+
 // Position / hitbox AABB (floats indexed in CalcItemBoxCollision via float* this).
 // Pattern: this[239]<=max.x && this[242]>=min.x && this[240]<=max.y && this[243]>=min.y
 inline constexpr std::size_t kOff_hitboxMinX                 = 0x03BC;  // float (player[239])
@@ -43,7 +55,12 @@ inline constexpr std::size_t kOff_hitboxMaxX                 = 0x03C8;  // float
 inline constexpr std::size_t kOff_hitboxMaxY                 = 0x03CC;  // float (player[243])
 inline constexpr std::size_t kOff_hitboxMaxZ_or_pad          = 0x03D0;  // float (player[244])
 
-// Position / velocity / scale floats touched by AddedCallback at +245..+253:
+// IMPORTANT: the +245..+253 fields below are NOT current position
+// (despite my earlier guess). Runtime test showed they stay constant
+// at (0.82, 1.40) across 2400+ frames while the actual player moved.
+// The live pos is at +0x2B4/+0x2B8 (see kOff_pos_x above).
+// These +245..+253 fields are likely some "spawn anchor" or normalized
+// scaling values from the sht file - keep the table for reference only.
 inline constexpr std::size_t kOff_posOrVel_245               = 0x03D4;  // = *(this+246)
 inline constexpr std::size_t kOff_posOrVel_246               = 0x03D8;  // = flt_164D2E4 / 2.0  (probably PLAYABLE_AREA width / 2)
 inline constexpr std::size_t kOff_posOrVel_247               = 0x03DC;  // = 1084227584 (5.0f as int)

@@ -73,21 +73,41 @@ int __fastcall hooked_RegisterChain(unsigned char arg)
     th08_platform::log_line("player2: post-Register state=%d pos=(%.2f, %.2f) hitbox.x=[%.2f, %.2f]",
                             post_state, pos_x, pos_y, hb_min_x, hb_max_x);
 
-    // Optional spawn-shift: env TH08_PLATFORM_PLAYER2_X_OFFSET=N moves
-    // g_Player2 by N pixels in X right after init. Useful for VISUAL
-    // confirmation that two players exist (without it they overlap).
+    // Spawn-shift: TH08_PLATFORM_PLAYER2_X_OFFSET=N pixels.
+    // Verified by IDA RE (codex 5e batch): live pos.x/y is at
+    // +0x2B4/+0x2B8 (not +0x3D4/+0x3D8 which is some unrelated
+    // static field). The boundary clamp at 0x44D420 reads from
+    // +0x2B4 (X) and +0x2B8 (Y) and compares to play-area edges.
+    // Without this shift, BOTH players draw at the same world pos
+    // and P2 is occluded by P1's sprite (= what user observed in
+    // the runtime test).
     char xoff_env[16] = {};
     if (GetEnvironmentVariableA("TH08_PLATFORM_PLAYER2_X_OFFSET", xoff_env,
                                 static_cast<DWORD>(sizeof(xoff_env))) > 0) {
         const float shift = static_cast<float>(atof(xoff_env));
         if (shift != 0.0f) {
-            *reinterpret_cast<float*>(p2 + 0x3D8) += shift;
+            *reinterpret_cast<float*>(p2 + 0x2B4) += shift;          // pos.x
             // Also nudge the hitbox AABB the same way so collision math
-            // (when 5c lands) sees the shifted position.
+            // sees the shifted position right away (the per-frame
+            // movement code in FUN_0044AEC0 will overwrite hitbox
+            // values from current pos, so this only matters for the
+            // first frame before that runs).
             *reinterpret_cast<float*>(p2 + 0x3BC) += shift;
             *reinterpret_cast<float*>(p2 + 0x3C8) += shift;
-            const float new_x = *reinterpret_cast<float*>(p2 + 0x3D8);
+            const float new_x = *reinterpret_cast<float*>(p2 + 0x2B4);
             th08_platform::log_line("player2: shifted X by %.2f -> new pos.x=%.2f", shift, new_x);
+        }
+    }
+    char yoff_env[16] = {};
+    if (GetEnvironmentVariableA("TH08_PLATFORM_PLAYER2_Y_OFFSET", yoff_env,
+                                static_cast<DWORD>(sizeof(yoff_env))) > 0) {
+        const float shift = static_cast<float>(atof(yoff_env));
+        if (shift != 0.0f) {
+            *reinterpret_cast<float*>(p2 + 0x2B8) += shift;          // pos.y
+            *reinterpret_cast<float*>(p2 + 0x3C0) += shift;
+            *reinterpret_cast<float*>(p2 + 0x3CC) += shift;
+            const float new_y = *reinterpret_cast<float*>(p2 + 0x2B8);
+            th08_platform::log_line("player2: shifted Y by %.2f -> new pos.y=%.2f", shift, new_y);
         }
     }
 
@@ -144,23 +164,23 @@ void on_frame_tick(unsigned long long frame_no)
     if (frame_no % log_interval != 0) return;
 
     auto dump = [&](const char* tag, std::uint8_t* p) {
-        // Derived current position = hitbox midpoint (in pixel coords).
-        // The +0x3D4/+0x3D8 fields turned out to be static "spawn anchor"
-        // values stuck at (0.82, 1.40) — NOT current pos. The real pos
-        // field is TBD pending IDA recon (codex 5e batch); for now we
-        // infer pos from the hitbox AABB which IS verified-correct.
+        // Verified offsets (codex 5e batch):
+        //   +0x2B4 (=+173 dword) = live pos.x (float)
+        //   +0x2B8 (=+174 dword) = live pos.y (float)
+        //   +0x3BC..+0x3CC = hitbox AABB (min_x/y, max_x/y, with 0x3C4/0x3D0 unused)
         const int st = static_cast<int>(p[0]);
+        const float pos_x = *reinterpret_cast<float*>(p + 0x2B4);
+        const float pos_y = *reinterpret_cast<float*>(p + 0x2B8);
         const float hb_min_x = *reinterpret_cast<float*>(p + 0x3BC);
         const float hb_min_y = *reinterpret_cast<float*>(p + 0x3C0);
         const float hb_max_x = *reinterpret_cast<float*>(p + 0x3C8);
         const float hb_max_y = *reinterpret_cast<float*>(p + 0x3CC);
-        const float pos_x = (hb_min_x + hb_max_x) * 0.5f;
-        const float pos_y = (hb_min_y + hb_max_y) * 0.5f;
         const float hb_w  = hb_max_x - hb_min_x;
         const float hb_h  = hb_max_y - hb_min_y;
         th08_platform::log_line(
-            "%s frame=%llu state=%d pos=(%.1f,%.1f) hb=%.1fx%.1f",
-            tag, frame_no, st, pos_x, pos_y, hb_w, hb_h);
+            "%s frame=%llu state=%d pos=(%.1f,%.1f) hb=%.1fx%.1f midpoint=(%.1f,%.1f)",
+            tag, frame_no, st, pos_x, pos_y, hb_w, hb_h,
+            (hb_min_x + hb_max_x) * 0.5f, (hb_min_y + hb_max_y) * 0.5f);
     };
     // p1: read g_Player (the singleton ZUN constructed at 0x17D5EF8).
     // p2: read our buffer. Compare drift over time:
