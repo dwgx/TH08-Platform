@@ -8,6 +8,8 @@
 #include "../logging.h"
 #include "player2.h"
 #include "globals.h"
+#include "p2_lives.h"
+#include "dual_collision.h"
 
 namespace th08_platform::state {
 
@@ -183,13 +185,19 @@ void on_frame_tick(unsigned long long frame_no)
             (hb_min_x + hb_max_x) * 0.5f, (hb_min_y + hb_max_y) * 0.5f);
     };
     // p1: read g_Player (the singleton ZUN constructed at 0x17D5EF8).
-    // p2: read our buffer. Compare drift over time:
-    //   - if posA drifts each frame and posB stays put -> A=current, B=target
-    //   - if posB drifts and posA stays put            -> opposite
-    //   - if hitbox starts at [0,0] and becomes non-zero -> hitbox is set
-    //     by per-frame movement code, NOT by AddedCallback.
+    // p2: read our buffer.
     dump("p1-tick", reinterpret_cast<std::uint8_t*>(globals::kAddr_g_Player));
     dump("p2-tick", th08_platform::player2::g_Player2);
+
+    // Phase 5g preview: log-based "HUD" showing per-player stats.
+    // Real visual HUD pending IDA recon of AsciiManager API.
+    const int p2_lives = th08_platform::state::p2_lives::snapshot_p2_lives();
+    const auto hits = th08_platform::state::dual_collision::snapshot_hit_counters();
+    const unsigned long long redirects =
+        th08_platform::state::p2_lives::snapshot_redirect_count();
+    th08_platform::log_line(
+        "HUD frame=%llu | P2 lives=%d | hits: p1=%llu p2=%llu (%llu test calls) | p2 deaths redirected=%llu",
+        frame_no, p2_lives, hits.p1_hits, hits.p2_hits, hits.total_calls, redirects);
 }
 
 void uninstall_player2_hook()
