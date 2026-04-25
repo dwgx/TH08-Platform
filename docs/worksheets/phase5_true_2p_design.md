@@ -87,6 +87,74 @@ separate Player chain entries, or does it assume singleton? Quick test:
 register g_Player2 to chain, see if game crashes / one player renders /
 both render. **MUST be answered before sub_5b.**
 
+### 5a status (2026-04-26)
+
+- **Skeleton committed** (`7a413f4`): `state/player2.{h,cpp}` provides
+  `Construct()` (zero-fill + SEH-wrapped thiscall ctor) and `Destruct()`.
+- **Trigger**: env var `TH08_PLATFORM_TEST_PLAYER2=1` invokes Construct()
+  in DLL init thread. Default off.
+- **Risk**: ctor at 0x449ca0 calls `sub_406720(this+16)` which inits an
+  inline AnmVm. If AnmManager (g_AnmManager at TBD) isn't ready, ctor
+  crashes. SEH catches it; g_Player2 stays zeroed.
+- **Test plan** (deferred to user): inject DLL with env var set AFTER
+  starting the game past title screen. Watch log for
+  `player2: g_Player2 constructed at 0x... post-ctor playerState=0`.
+
+### 5b prerequisite (game-init timing)
+
+Verified: `sub_43ABD7` (the gameplay-init function, address 0x43ABD7,
+3423 bytes — likely `GameManager::OnGameStart` or similar). Sequence:
+
+1. `dword_160F508 = malloc(...)`             — alloc GameManager  
+2. `dword_160F50C = operator new(0x3Cu)`     — alloc 60-byte struct  
+3. `dword_160F510 = operator new(0xE4u)`     — alloc ZunGlobals  
+4. `sub_43B984()`                            — game state init  
+5. `qmemcpy(... &word_17CE870 ...)`          — config copy  
+6. **`result = sub_44C230(0);`**             — **Player::RegisterChain**  ← timing point
+7. `sub_43C686(&dword_160F508)`              — more chain installs
+8. ZunGlobals init: lives, score, gauges...  
+9. ... runs until level start
+
+**5b plan**: hook `Player::RegisterChain` at 0x44C230 with MinHook;
+trampoline calls original first, then if return == ZUN_SUCCESS, our
+detour calls `player2::Construct()` and registers a parallel chain
+element via `sub_43CE60(0x44C390)` (chain-elem alloc) + chain-add via
+`sub_43C880`/`sub_43C960`. **Skip if `Construct()` returns false** —
+don't add a half-init player to the chain.
+
+### Chain primitive (sub_43CE60)
+
+Verified body — allocates a 32-byte ChainElem:
+
+```c
+Block = operator new(0x20u);           // 32 = sizeof(ChainElem)
+sub_43C760(Block);                     // ChainElem::Init
+v4 = sub_429DE0(v2, 32, "funcChainInf"); // tag/track allocation
+sub_406520(a1);                        // a1 = function ptr (e.g. 0x44C390)
+*(WORD*)(v4 + 2) |= 1;                 // mark as registered
+return v4;
+```
+
+The returned ChainElem layout (verified in RegisterChain):
+- `+0x08` = AddedCallback pointer
+- `+0x0C` = DeletedCallback pointer
+- `+0x1C` = context pointer (set to `&g_Player` for P1, will be `&g_Player2` for P2)
+
+For 5b, we replicate `sub_44C230` body for g_Player2:
+```c
+g_Player2CalcChain      = sub_43CE60(0x44C390);  // OnUpdate
+g_Player2DrawChainHigh  = sub_43CE60(0x44D530);  // OnDrawHighPrio  
+g_Player2DrawChainLow   = sub_43CE60(0x44D630);  // OnDrawLowPrio
+*(DWORD*)(g_Player2CalcChain      + 28) = (DWORD)&g_Player2;
+*(DWORD*)(g_Player2DrawChainHigh  + 28) = (DWORD)&g_Player2;
+*(DWORD*)(g_Player2DrawChainLow   + 28) = (DWORD)&g_Player2;
+*(DWORD*)(g_Player2CalcChain      +  8) = 0x44D650;  // AddedCallback
+*(DWORD*)(g_Player2CalcChain      + 12) = 0x44DC60;  // DeletedCallback
+sub_43C880(g_Player2CalcChain,      9);   // priority 9 same as P1
+sub_43C960(g_Player2DrawChainHigh,  9);
+sub_43C960(g_Player2DrawChainLow,  10);
+```
+
 ---
 
 ## Sub-phase 5c — Dual collision (the hardest piece)
