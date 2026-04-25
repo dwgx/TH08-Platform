@@ -48,6 +48,7 @@ add_library(th08_platform SHARED
     src/state/heap_journal.cpp
     src/state/player2.cpp
     src/state/player2_hook.cpp
+    src/state/dual_collision.cpp
 )
 target_include_directories(th08_platform PRIVATE
     src

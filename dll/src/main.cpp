@@ -13,6 +13,7 @@
 #include "net/rollback.h"
 #include "state/player2.h"
 #include "state/player2_hook.h"
+#include "state/dual_collision.h"
 
 namespace {
 std::uint16_t read_listen_port()
@@ -118,6 +119,19 @@ DWORD WINAPI dll_init_thread(LPVOID)
         }
     }
 
+    // Sub-phase 5c opt-in: dual collision (Player::TestHitbox hook).
+    // Independent of 5b's auto-hook; useful only with PLAYER2_AUTO=1
+    // since the dual test no-ops if g_Player2 isn't constructed.
+    char dc_env[8] = {};
+    if (GetEnvironmentVariableA("TH08_PLATFORM_DUAL_COLLISION", dc_env,
+                                static_cast<DWORD>(sizeof(dc_env))) > 0 &&
+        dc_env[0] == '1') {
+        th08_platform::log_line("phase 5c: TH08_PLATFORM_DUAL_COLLISION=1, installing TestHitbox hook");
+        const bool dc_ok = th08_platform::state::dual_collision::install_hook();
+        th08_platform::log_line("phase 5c: dual_collision install %s",
+                                dc_ok ? "ok" : "FAILED");
+    }
+
     if (game_loop_ok && input_ok && rollback_audio_ok && net_ok) {
         th08_platform::log_line("phase 4 ready");
     } else if (!game_loop_ok) {
@@ -140,6 +154,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID /*reserved*/)
         CreateThread(nullptr, 0, dll_init_thread, nullptr, 0, nullptr);
         break;
     case DLL_PROCESS_DETACH:
+        th08_platform::state::dual_collision::uninstall_hook();
         th08_platform::state::uninstall_player2_hook();
         th08_platform::hooks::uninstall_input_hook();
         th08_platform::hooks::uninstall_game_loop_hook();
