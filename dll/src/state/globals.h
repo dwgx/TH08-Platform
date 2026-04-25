@@ -32,8 +32,16 @@ inline constexpr std::size_t kSize_NumOfFramesInputsWereHeld = 0x0002;
 inline constexpr std::size_t kSize_Chain = 0x0040;  // Verified: 2 * sizeof(ChainElem) where ChainElem = 32B.
 inline constexpr std::size_t kSize_ControllerData = 0x0080;  // Global.cpp exposes a 32*4-byte array.
 inline constexpr std::size_t kSize_ItemManager = 0x17b094;
-inline constexpr std::size_t kSize_EnemyManager = 0;  // TBD: no sizeof C_ASSERT found in decomp.
-inline constexpr std::size_t kSize_BulletManager = 0;  // TBD: no sizeof C_ASSERT found in decomp.
+// EnemyManager + BulletManager: decomp's hpp declares only methods, no
+// fields, so no C_ASSERT exists. Sizes inferred from address-subtraction
+// to the next named global in reccmp-symbols.csv:
+//   g_EnemyManager  (0x00577f20) -> g_EnemyManagerCalcChain (0x00f54e30) = 0x9DCF10
+//   g_BulletManager (0x00f54e90) -> g_BulletManagerCalcChain(0x0160f408) = 0x6BA578
+// Layout-safe: no other named globals fall between, so capturing this many
+// bytes does NOT overrun into adjacent state. Heavy (~17 MB combined, mostly
+// inactive enemy/bullet slots) — Phase 4 may optimize via delta/sparse capture.
+inline constexpr std::size_t kSize_EnemyManager = 0x9DCF10;
+inline constexpr std::size_t kSize_BulletManager = 0x6BA578;
 inline constexpr std::size_t kSize_Background = 0x6600;
 inline constexpr std::size_t kSize_AsciiManager = 0x171b0;
 inline constexpr std::size_t kSize_Supervisor = 0x0364;
