@@ -14,6 +14,7 @@
 #include "state/player2.h"
 #include "state/player2_hook.h"
 #include "state/dual_collision.h"
+#include "state/p2_input.h"
 
 namespace {
 std::uint16_t read_listen_port()
@@ -132,6 +133,19 @@ DWORD WINAPI dll_init_thread(LPVOID)
                                 dc_ok ? "ok" : "FAILED");
     }
 
+    // Sub-phase 5d opt-in: per-player input routing.
+    // Hooks Player::OnUpdate; when called with this=&g_Player2, swaps
+    // input globals for the duration of that one OnUpdate call.
+    char p2i_env[8] = {};
+    if (GetEnvironmentVariableA("TH08_PLATFORM_P2_INPUT", p2i_env,
+                                static_cast<DWORD>(sizeof(p2i_env))) > 0 &&
+        p2i_env[0] == '1') {
+        th08_platform::log_line("phase 5d: TH08_PLATFORM_P2_INPUT=1, installing OnUpdate input-swap hook");
+        const bool p2i_ok = th08_platform::state::p2_input::install_hook();
+        th08_platform::log_line("phase 5d: p2_input install %s",
+                                p2i_ok ? "ok" : "FAILED");
+    }
+
     if (game_loop_ok && input_ok && rollback_audio_ok && net_ok) {
         th08_platform::log_line("phase 4 ready");
     } else if (!game_loop_ok) {
@@ -154,6 +168,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID /*reserved*/)
         CreateThread(nullptr, 0, dll_init_thread, nullptr, 0, nullptr);
         break;
     case DLL_PROCESS_DETACH:
+        th08_platform::state::p2_input::uninstall_hook();
         th08_platform::state::dual_collision::uninstall_hook();
         th08_platform::state::uninstall_player2_hook();
         th08_platform::hooks::uninstall_input_hook();
