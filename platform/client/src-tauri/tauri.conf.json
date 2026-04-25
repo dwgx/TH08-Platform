@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "TH-Platform",
+  "version": "0.1.0",
+  "identifier": "com.dwgx.thplatform",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "TH-Platform",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": false,
+        "titleBarStyle": "Overlay",
+        "backgroundColor": "#12141c"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' tauri: asset: https://asset.localhost ipc: http://ipc.localhost; connect-src 'self' http://localhost:8080 ws://localhost:8080 http://127.0.0.1:8080 ws://127.0.0.1:8080 https://api.th-platform.example.com wss://api.th-platform.example.com; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Game",
+    "copyright": "© 2026 dwgx — AGPL-3.0-or-later",
+    "shortDescription": "Touhou multiplayer platform",
+    "longDescription": "Desktop launcher and social client for Touhou shoot-em-up games with DLL-injection based multiplayer."
+  },
+  "plugins": {
+    "shell": { "open": true },
+    "fs": { "scope": ["$APPDATA/*"] },
+    "store": {}
+  }
+}
