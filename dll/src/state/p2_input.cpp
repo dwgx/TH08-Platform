@@ -65,6 +65,47 @@ std::uint16_t demo_input_for_frame(unsigned long long n_calls)
     return 0;
 }
 
+// RAII guard: snapshots P1 input globals on construction, restores on
+// destruction. Exception-safe (review HIGH p2_input.cpp:103/109): if
+// the original OnUpdate SEHs through us, the dtor still runs and P1
+// input is restored.
+struct InputSwapGuard {
+    bool active;
+    std::uint16_t* cur;
+    std::uint16_t* last;
+    std::uint16_t* held;
+    std::uint16_t* eighth;
+    std::uint16_t saved_cur, saved_last, saved_held, saved_eighth;
+
+    explicit InputSwapGuard(bool swap_now)
+        : active(swap_now)
+        , cur(reinterpret_cast<std::uint16_t*>(globals::kAddr_g_CurFrameInput))
+        , last(reinterpret_cast<std::uint16_t*>(globals::kAddr_g_LastFrameInput))
+        , held(reinterpret_cast<std::uint16_t*>(globals::kAddr_g_NumOfFramesInputsWereHeld))
+        , eighth(reinterpret_cast<std::uint16_t*>(globals::kAddr_g_IsEighthFrameOfHeldInput))
+        , saved_cur(*cur), saved_last(*last)
+        , saved_held(*held), saved_eighth(*eighth)
+    {}
+
+    void apply_p2(std::uint16_t p2_cur)
+    {
+        *cur = p2_cur;
+        *last = 0;
+        *held = (p2_cur == 0) ? 0 : 1;
+        *eighth = 0;
+    }
+
+    ~InputSwapGuard()
+    {
+        if (active) {
+            *cur = saved_cur;
+            *last = saved_last;
+            *held = saved_held;
+            *eighth = saved_eighth;
+        }
+    }
+};
+
 int __fastcall hooked_OnUpdate(void* this_, void* edx)
 {
     // P1 (or any non-g_Player2 invocation): pass through.
@@ -75,48 +116,22 @@ int __fastcall hooked_OnUpdate(void* this_, void* edx)
     const unsigned long long ncalls =
         g_p2_calls.fetch_add(1, std::memory_order_relaxed) + 1;
 
-    // Snapshot P1's input globals.
-    auto* const cur  = reinterpret_cast<std::uint16_t*>(globals::kAddr_g_CurFrameInput);
-    auto* const last = reinterpret_cast<std::uint16_t*>(globals::kAddr_g_LastFrameInput);
-    auto* const held = reinterpret_cast<std::uint16_t*>(globals::kAddr_g_NumOfFramesInputsWereHeld);
-    auto* const eighth = reinterpret_cast<std::uint16_t*>(globals::kAddr_g_IsEighthFrameOfHeldInput);
-    const std::uint16_t saved_cur = *cur;
-    const std::uint16_t saved_last = *last;
-    const std::uint16_t saved_held = *held;
-    const std::uint16_t saved_eighth = *eighth;
-
     // Compute P2 input.
     std::uint16_t p2_cur = 0;
     switch (g_mode) {
-        case Mode::Mirror:     p2_cur = saved_cur; break;
+        case Mode::Mirror:     /* keep P1 input verbatim - no swap */ break;
         case Mode::Demo:       p2_cur = demo_input_for_frame(ncalls); break;
         case Mode::Stationary: p2_cur = 0; break;
     }
 
-    // Apply P2 input. We zero held/eighth so P2 starts each frame as
-    // a fresh-press case (Player movement code uses these for repeat
-    // detection; for our static modes the wrong values would hurt P2
-    // movement physics). Mirror mode keeps everything verbatim.
+    // Mirror mode = no swap needed. Other modes = guard-protected swap.
     if (g_mode == Mode::Mirror) {
-        // Already saved_*; nothing to swap.
-    } else {
-        *cur = p2_cur;
-        *last = 0;
-        *held = (p2_cur == 0) ? 0 : 1;
-        *eighth = 0;
+        return g_original(this_, edx);
     }
-
-    const int result = g_original(this_, edx);
-
-    // Restore P1 input globals.
-    if (g_mode != Mode::Mirror) {
-        *cur = saved_cur;
-        *last = saved_last;
-        *held = saved_held;
-        *eighth = saved_eighth;
-    }
-
-    return result;
+    InputSwapGuard guard(/*swap_now=*/true);
+    guard.apply_p2(p2_cur);
+    return g_original(this_, edx);
+    // ~InputSwapGuard restores even on SEH unwind.
 }
 
 void* resolve_target()

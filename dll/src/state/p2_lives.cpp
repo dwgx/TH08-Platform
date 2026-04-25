@@ -41,17 +41,29 @@ std::atomic<int> g_p2_lives{3};
 
 std::atomic<unsigned long long> g_redirect_count{0};
 
+// RAII scoped guard: sets g_p2_dying=true on construction, clears on
+// destruction. Fixes review HIGH p2_lives.cpp:47/50 — if the original
+// FUN_0044CBF0 SEHs through us, the dtor still clears the flag.
+// Without this, the flag stays true permanently and SUBSEQUENT P1
+// lives losses would be misattributed to P2.
+struct DyingGuard {
+    bool was_p2;
+    explicit DyingGuard(bool p2) : was_p2(p2)
+    {
+        if (was_p2) g_p2_dying.store(true, std::memory_order_release);
+    }
+    ~DyingGuard()
+    {
+        if (was_p2) g_p2_dying.store(false, std::memory_order_release);
+    }
+};
+
 int __fastcall hooked_fun44CBF0(void* this_, void* edx)
 {
     const bool is_p2 = (this_ == th08_platform::player2::g_Player2);
-    if (is_p2) {
-        g_p2_dying.store(true, std::memory_order_release);
-    }
-    const int result = g_orig_fun44CBF0(this_, edx);
-    if (is_p2) {
-        g_p2_dying.store(false, std::memory_order_release);
-    }
-    return result;
+    DyingGuard guard(is_p2);
+    return g_orig_fun44CBF0(this_, edx);
+    // ~DyingGuard clears flag even on SEH unwind.
 }
 
 void __fastcall hooked_AddLives(void* gm_this, void* edx, int delta)

@@ -46,8 +46,27 @@ inline constexpr std::size_t kOff_pos_z                      = 0x02BC;  // float
 // decodes g_CurFrameInput bits and writes 0/1/2/3/4 here):
 inline constexpr std::size_t kOff_moveDirection              = 0xE2A98;  // i32 (0=none, 1=up, 2=down, 3=left, 4=right)
 
-// Position / hitbox AABB (floats indexed in CalcItemBoxCollision via float* this).
-// Pattern: this[239]<=max.x && this[242]>=min.x && this[240]<=max.y && this[243]>=min.y
+// CORRECTED by codex 5g recon (verified via TestHitbox sub_449FF0
+// decomp): the player BODY AABB used for bullet-hit detection is at
+// `+0x38C..+0x39C` (= player[227..231], 4 floats).
+inline constexpr std::size_t kOff_bodyAabbMinX               = 0x038C;  // float (player[227])
+inline constexpr std::size_t kOff_bodyAabbMinY               = 0x0390;  // float (player[228])
+inline constexpr std::size_t kOff_bodyAabbMaxX               = 0x0398;  // float (player[230])
+inline constexpr std::size_t kOff_bodyAabbMaxY               = 0x039C;  // float (player[231])
+
+// The 192-slot table at `+0xBB834` (size 192*64 = 0x3000 bytes,
+// corrected from earlier guess of +0xBB7B4) is the player's "incoming
+// hit-test slots" iterated by sub_449FF0 — each slot is one possible
+// bullet-vs-player test. Each slot has center.xy at +0/+4, radius at
+// +8, optional rect_w/h at +16/+20, etc. Per-slot active flag at +60.
+inline constexpr std::size_t kOff_hitTestSlots               = 0xBB834;
+inline constexpr std::size_t kCount_hitTestSlots             = 192;
+inline constexpr std::size_t kSize_hitTestSlot               = 64;
+
+// LEGACY (DO NOT USE): these were my earlier guess at hitbox - they're
+// some OTHER float region that tracks per-frame but is NOT the body
+// AABB. Kept only because the runtime diagnostic still references them
+// for cross-checking. To be removed when diagnostic is rewritten.
 inline constexpr std::size_t kOff_hitboxMinX                 = 0x03BC;  // float (player[239])
 inline constexpr std::size_t kOff_hitboxMinY                 = 0x03C0;  // float (player[240])
 inline constexpr std::size_t kOff_hitboxMinZ_or_pad          = 0x03C4;  // float (player[241]) — read but not used in 2D box test

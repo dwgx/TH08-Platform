@@ -1,6 +1,8 @@
 #include "frame_state.h"
 
 #include "globals.h"
+#include "player2.h"
+#include "p2_lives.h"
 #include "../logging.h"
 
 #include <array>
@@ -178,6 +180,15 @@ void capture(FrameState& state, std::uint64_t frame_number)
         const RegionSpec& spec = kStaticRegionSpecs[i];
         capture_region(state, spec.label, spec.address, spec.size);
     }
+
+    // Phase 5/network: capture our DLL-owned g_Player2 buffer so
+    // rollback can rewind it alongside ZUN's g_Player. Without this
+    // (review HIGH C), rollback would restore g_Player but leave
+    // g_Player2 at the current frame's state -> P1/P2 desync after
+    // any rewind.
+    capture_region(state, "g_Player2",
+                   reinterpret_cast<std::uintptr_t>(th08_platform::player2::g_Player2),
+                   th08_platform::player2::kSize);
 }
 
 void restore(const FrameState& state)
