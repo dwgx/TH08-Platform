@@ -7,6 +7,7 @@
 
 #include "../logging.h"
 #include "player2.h"
+#include "globals.h"
 
 namespace th08_platform::state {
 
@@ -23,7 +24,11 @@ constexpr DWORD kRegisterChainRVA = 0x44c230 - 0x400000;
 using RegisterChain_t = int(__fastcall*)(unsigned char arg);
 RegisterChain_t g_original_RegisterChain = nullptr;
 
-bool g_player2_done = false;  // idempotent guard
+}  // namespace
+
+bool g_player2_done = false;  // idempotent guard, exposed for on_frame_tick
+
+namespace {
 
 int __fastcall hooked_RegisterChain(unsigned char arg)
 {
@@ -120,6 +125,47 @@ bool install_player2_hook()
     }
     th08_platform::log_line("player2_hook: Player::RegisterChain hook enabled");
     return true;
+}
+
+void on_frame_tick(unsigned long long frame_no)
+{
+    static unsigned int log_interval = 0;
+    static bool initialized = false;
+    if (!initialized) {
+        initialized = true;
+        char env[16] = {};
+        if (GetEnvironmentVariableA("TH08_PLATFORM_PLAYER2_TICK_LOG", env,
+                                    static_cast<DWORD>(sizeof(env))) > 0) {
+            int n = atoi(env);
+            log_interval = (n > 0) ? static_cast<unsigned int>(n) : 0;
+        }
+    }
+    if (log_interval == 0 || !g_player2_done) return;
+    if (frame_no % log_interval != 0) return;
+
+    auto dump = [&](const char* tag, std::uint8_t* p) {
+        const int st = static_cast<int>(p[0]);
+        const float pa_x = *reinterpret_cast<float*>(p + 0x3D4);
+        const float pa_y = *reinterpret_cast<float*>(p + 0x3E0);
+        const float pb_x = *reinterpret_cast<float*>(p + 0x3D8);
+        const float pb_y = *reinterpret_cast<float*>(p + 0x3E4);
+        const float hb_min_x = *reinterpret_cast<float*>(p + 0x3BC);
+        const float hb_min_y = *reinterpret_cast<float*>(p + 0x3C0);
+        const float hb_max_x = *reinterpret_cast<float*>(p + 0x3C8);
+        const float hb_max_y = *reinterpret_cast<float*>(p + 0x3CC);
+        th08_platform::log_line(
+            "%s frame=%llu state=%d posA=(%.2f,%.2f) posB=(%.2f,%.2f) hb=[(%.2f,%.2f),(%.2f,%.2f)]",
+            tag, frame_no, st, pa_x, pa_y, pb_x, pb_y,
+            hb_min_x, hb_min_y, hb_max_x, hb_max_y);
+    };
+    // p1: read g_Player (the singleton ZUN constructed at 0x17D5EF8).
+    // p2: read our buffer. Compare drift over time:
+    //   - if posA drifts each frame and posB stays put -> A=current, B=target
+    //   - if posB drifts and posA stays put            -> opposite
+    //   - if hitbox starts at [0,0] and becomes non-zero -> hitbox is set
+    //     by per-frame movement code, NOT by AddedCallback.
+    dump("p1-tick", reinterpret_cast<std::uint8_t*>(globals::kAddr_g_Player));
+    dump("p2-tick", th08_platform::player2::g_Player2);
 }
 
 void uninstall_player2_hook()

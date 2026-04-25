@@ -18,4 +18,11 @@ namespace th08_platform::state {
 bool install_player2_hook();
 void uninstall_player2_hook();
 
+// Called from the GameManager::OnUpdate frame hook. If g_Player2 is
+// wired and TH08_PLATFORM_PLAYER2_TICK_LOG=N (N>0), log P2's pos +
+// hitbox every N frames. Helps diagnose whether hitbox gets populated
+// by the per-frame code (hint: the runtime test showed hitbox=[0,0]
+// immediately post-Register, so it must update LATER).
+void on_frame_tick(unsigned long long frame_no);
+
 }  // namespace th08_platform::state
