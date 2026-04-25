@@ -39,6 +39,7 @@ add_library(th08_platform SHARED
     src/main.cpp
     src/logging.cpp
     src/hooks/game_loop.cpp
+    src/hooks/input.cpp
     src/state/frame_state.cpp
     src/state/heap_journal.cpp
 )
