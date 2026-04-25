@@ -9,6 +9,13 @@ inline constexpr std::uintptr_t kAddr_g_GameManager = 0x0160f508;
 inline constexpr std::uintptr_t kAddr_g_Player = 0x017d5ef8;
 inline constexpr std::uintptr_t kAddr_g_Rng = 0x0164d520;
 inline constexpr std::uintptr_t kAddr_g_CurFrameInput = 0x0164d528;
+// Verified by codex 5.5 RE: sub_44AEC0 (the Player movement function)
+// reads word_164D52C, NOT g_CurFrameInput at 0x164D528. They are
+// SEPARATE input slots — 0x164D528 is the raw poll, 0x164D52C is the
+// processed/edge-detected variant that game logic actually consumes
+// for direction + shoot + bomb decisions. Our 5d input swap MUST
+// patch this one too or movement/firing will see only P1 input.
+inline constexpr std::uintptr_t kAddr_g_GameInputBits = 0x0164d52c;
 inline constexpr std::uintptr_t kAddr_g_LastFrameInput = 0x0164d530;
 inline constexpr std::uintptr_t kAddr_g_IsEighthFrameOfHeldInput = 0x0164d538;
 inline constexpr std::uintptr_t kAddr_g_NumOfFramesInputsWereHeld = 0x0164d53c;

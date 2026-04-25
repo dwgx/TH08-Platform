@@ -65,31 +65,52 @@ std::uint16_t demo_input_for_frame(unsigned long long n_calls)
     return 0;
 }
 
-// RAII guard: snapshots P1 input globals on construction, restores on
-// destruction. Exception-safe (review HIGH p2_input.cpp:103/109): if
-// the original OnUpdate SEHs through us, the dtor still runs and P1
-// input is restored.
+// Player::sub_451640 @ 0x451640 — arms the bullet timer at this+0xE2AC4
+// for shooting. Verified this-aware by codex 5.5 breakthrough RE.
+// Without this, sub_451500's gate at 0x451527 (`if (*(this+0xE2AC4) < 0)
+// return 0;`) blocks the call to sub_450F60 → sub_44FB70 (spawn).
+constexpr std::uintptr_t kAddr_ArmShotTimer = 0x451640;
+using PlayerThunk_t = void(__fastcall*)(void* this_, void* edx_unused);
+
+// Bomb-press flag offset inside Player struct. sub_44C650 reads
+// *(BYTE*)(this+6); if non-zero AND bomb count == 1, runs the bomb path.
+constexpr std::ptrdiff_t kOff_BombPressFlag = 6;
+
+// RAII guard: snapshots BOTH g_CurFrameInput (0x164D528) AND
+// g_GameInputBits (0x164D52C) on construction, restores on destruction.
+// Exception-safe (review HIGH p2_input.cpp:103/109): if the original
+// OnUpdate SEHs through us, the dtor still runs and P1 input is
+// restored.
+//
+// Two different input slots exist:
+//   0x164D528 (g_CurFrameInput): the raw poll from Controller::GetInput
+//   0x164D52C (g_GameInputBits): the processed/edge-detected variant
+//                                read by sub_44AEC0 for movement,
+//                                shoot detection, etc. (codex 5.5 RE)
 struct InputSwapGuard {
     bool active;
     std::uint16_t* cur;
+    std::uint16_t* gamebits;
     std::uint16_t* last;
     std::uint16_t* held;
     std::uint16_t* eighth;
-    std::uint16_t saved_cur, saved_last, saved_held, saved_eighth;
+    std::uint16_t saved_cur, saved_gamebits, saved_last, saved_held, saved_eighth;
 
     explicit InputSwapGuard(bool swap_now)
         : active(swap_now)
         , cur(reinterpret_cast<std::uint16_t*>(globals::kAddr_g_CurFrameInput))
+        , gamebits(reinterpret_cast<std::uint16_t*>(globals::kAddr_g_GameInputBits))
         , last(reinterpret_cast<std::uint16_t*>(globals::kAddr_g_LastFrameInput))
         , held(reinterpret_cast<std::uint16_t*>(globals::kAddr_g_NumOfFramesInputsWereHeld))
         , eighth(reinterpret_cast<std::uint16_t*>(globals::kAddr_g_IsEighthFrameOfHeldInput))
-        , saved_cur(*cur), saved_last(*last)
-        , saved_held(*held), saved_eighth(*eighth)
+        , saved_cur(*cur), saved_gamebits(*gamebits)
+        , saved_last(*last), saved_held(*held), saved_eighth(*eighth)
     {}
 
     void apply_p2(std::uint16_t p2_cur)
     {
         *cur = p2_cur;
+        *gamebits = p2_cur;          // movement / shoot / bomb consumer
         *last = 0;
         *held = (p2_cur == 0) ? 0 : 1;
         *eighth = 0;
@@ -99,12 +120,38 @@ struct InputSwapGuard {
     {
         if (active) {
             *cur = saved_cur;
+            *gamebits = saved_gamebits;
             *last = saved_last;
             *held = saved_held;
             *eighth = saved_eighth;
         }
     }
 };
+
+// Bypass-the-pipeline writes for shoot + bomb. Even with input swap,
+// sub_44AEC0 only writes the bomb-press flag for P1 (codex 5.5 RE
+// confirmed: no `*(this+6)` write in sub_44AEC0). And sub_451500's
+// shoot gate needs the timer pre-armed by sub_451640. So we directly
+// poke g_Player2's slots before OnUpdate runs.
+void apply_p2_action_pokes(void* p2, std::uint16_t p2_cur)
+{
+    if (!p2) return;
+    auto* const arm = reinterpret_cast<PlayerThunk_t>(kAddr_ArmShotTimer);
+    if (p2_cur & 0x0001) {  // Z / shoot — arm the bullet timer this frame
+        __try {
+            arm(p2, nullptr);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            // Arming on a fresh-ctor'd Player buffer might trip if
+            // chain isn't fully wired; swallow + skip rather than die.
+        }
+    }
+    // X / bomb — set the press flag this frame; cleared by sub_44C650
+    // when consumed (or stays 1 next frame if still held; that's fine
+    // because sub_44C650 also requires bomb-count > 0 to act).
+    auto* const bomb_flag = reinterpret_cast<std::uint8_t*>(
+        reinterpret_cast<std::uint8_t*>(p2) + kOff_BombPressFlag);
+    *bomb_flag = (p2_cur & 0x0002) ? 1 : 0;
+}
 
 int __fastcall hooked_OnUpdate(void* this_, void* edx)
 {
@@ -124,12 +171,22 @@ int __fastcall hooked_OnUpdate(void* this_, void* edx)
         case Mode::Stationary: p2_cur = 0; break;
     }
 
-    // Mirror mode = no swap needed. Other modes = guard-protected swap.
+    // Mirror mode = use P1 input verbatim for swap targets, but still
+    // poke the action slots so P2 fires/bombs when P1 does.
     if (g_mode == Mode::Mirror) {
+        // P1's already-current input drives both players' moveDirection;
+        // sub_44AEC0 will run for both with the same input. We still
+        // bypass the input pipeline for shoot/bomb on P2 because the
+        // shoot timer + bomb flag aren't written by sub_44AEC0 even
+        // when input is "correct".
+        const std::uint16_t p1_cur = *reinterpret_cast<std::uint16_t*>(globals::kAddr_g_CurFrameInput);
+        apply_p2_action_pokes(this_, p1_cur);
         return g_original(this_, edx);
     }
+
     InputSwapGuard guard(/*swap_now=*/true);
     guard.apply_p2(p2_cur);
+    apply_p2_action_pokes(this_, p2_cur);
     return g_original(this_, edx);
     // ~InputSwapGuard restores even on SEH unwind.
 }
