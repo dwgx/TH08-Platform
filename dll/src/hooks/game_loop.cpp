@@ -10,18 +10,22 @@ namespace th08_platform::hooks {
 
 namespace {
 // th08::GameManager::OnUpdate in th08.exe v1.00d.
-// From game/config/mapping.csv:
-//   th08::GameManager::OnUpdate,0x43aa03,0x59,__cdecl,,i32,GameManager*
-// Signature: ChainCallbackResult __cdecl OnUpdate(GameManager *gm);
-// th08's image base is 0x400000 — file-offset subtraction gives the RVA.
-constexpr DWORD kGameManagerOnUpdateRVA = 0x43aa03 - 0x400000;
+// From config/mapping.csv (line 528):
+//   th08::GameManager::OnUpdate,0x439bc7,0xe3c,unknown,,u8
+// Mapping marks it `unknown`, but the decomp's ChainCallback pattern
+// (AsciiManager/Supervisor/Gui/etc.) is __fastcall — gm in ECX, no stack
+// args. Image base is 0x400000.
+//
+// (0x43aa03 is GameManager::OnDraw, NOT OnUpdate — earlier scaffold
+// used the wrong address and crashed entering a stage.)
+constexpr DWORD kGameManagerOnUpdateRVA = 0x439bc7 - 0x400000;
 
-using OnUpdate_t = int(__cdecl*)(void* /*GameManager*/);
+using OnUpdate_t = int(__fastcall*)(void* /*GameManager*/);
 OnUpdate_t g_original_OnUpdate = nullptr;
 
 std::atomic<uint64_t> g_frame_count{0};
 
-int __cdecl hooked_OnUpdate(void* gm)
+int __fastcall hooked_OnUpdate(void* gm)
 {
     const auto f = g_frame_count.fetch_add(1, std::memory_order_relaxed) + 1;
     if (f % 60 == 0) {
