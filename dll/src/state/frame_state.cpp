@@ -17,6 +17,7 @@ struct RegionSpec {
 
 constexpr std::array kStaticRegionSpecs{
     RegionSpec{globals::kAddr_g_GameManager, globals::kSize_GameManager, "g_GameManager"},
+    RegionSpec{globals::kAddr_g_Player, globals::kSize_Player, "g_Player"},
     RegionSpec{globals::kAddr_g_Rng, globals::kSize_Rng, "g_Rng"},
     RegionSpec{globals::kAddr_g_CurFrameInput, globals::kSize_CurFrameInput, "g_CurFrameInput"},
     RegionSpec{globals::kAddr_g_LastFrameInput, globals::kSize_LastFrameInput, "g_LastFrameInput"},
@@ -146,6 +147,7 @@ void log_restore_self_test_once() noexcept
 // If these fail to compile, the decomp's struct sizes drifted from what
 // the binary actually has - investigate before changing them.
 static_assert(globals::kSize_GameManager == 0x3de3c);
+static_assert(globals::kSize_Player == 0xE2B30);
 static_assert(globals::kSize_ZunGlobals == 0x00e4);
 static_assert(globals::kSize_CurFrameInput == 0x0002);
 static_assert(globals::kSize_LastFrameInput == 0x0002);

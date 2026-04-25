@@ -28,7 +28,7 @@ inline constexpr std::size_t kSize_GameManager = 0x3de3c;
 //   memset(&byte_17D5EF8, 0, 0xE2B30u)
 // to clear g_Player on init. So sizeof(Player) is EXACTLY 0xE2B30 bytes.
 // This includes two heap-pointer FIELDS at +0xE2A74 / +0xE2A78 (shtFile1/2
-// slots, freed by Player::DeletedCallback) — those buffers themselves
+// slots, freed by Player::DeletedCallback) - those buffers themselves
 // must be heap-journaled for rollback (Phase 4 already supports this).
 inline constexpr std::size_t kSize_Player = 0xE2B30;
 inline constexpr std::size_t kOffset_Player_shtFile1Slot = 0xE2A74;
