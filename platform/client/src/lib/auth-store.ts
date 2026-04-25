@@ -1,10 +1,58 @@
-// Zustand store for auth state + persistence through Tauri's store plugin
-// (so tokens survive restarts). Keeping tokens in Tauri rather than
-// localStorage because we don't want a renderer-process XSS (however
-// unlikely) to leak them.
+// Zustand store for auth state with dual persistence backend:
+// - In Tauri: @tauri-apps/plugin-store (keychain-adjacent, survives
+//   restarts, harder to leak via renderer XSS).
+// - In a browser (pnpm dev preview, demo URL): localStorage fallback.
+//
+// The shim exposes the same minimal surface the rest of the store uses:
+// get / set / delete / save. Keeps the rest of the code storage-agnostic.
 import { create } from "zustand";
-import { load, type Store } from "@tauri-apps/plugin-store";
 import { api, type UserProfile } from "@/lib/api";
+
+type KVStore = {
+  get<T>(key: string): Promise<T | null>;
+  set(key: string, value: unknown): Promise<void>;
+  delete(key: string): Promise<void>;
+  save(): Promise<void>;
+};
+
+async function openTauriStore(): Promise<KVStore | null> {
+  try {
+    // Dynamic import so running in a plain browser (Vite dev) doesn't
+    // require the Tauri plugin at module-load time.
+    const mod = await import("@tauri-apps/plugin-store");
+    const s = await mod.load("auth.dat", { autoSave: false });
+    return {
+      async get<T>(key) { return (await s.get<T>(key)) ?? null; },
+      async set(key, v) { await s.set(key, v); },
+      async delete(key) { await s.delete(key); },
+      async save() { await s.save(); },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function makeLocalStorageShim(): KVStore {
+  const prefix = "th.auth.";
+  return {
+    async get<T>(key) {
+      const raw = localStorage.getItem(prefix + key);
+      if (raw == null) return null;
+      try { return JSON.parse(raw) as T; } catch { return null; }
+    },
+    async set(key, v) { localStorage.setItem(prefix + key, JSON.stringify(v)); },
+    async delete(key) { localStorage.removeItem(prefix + key); },
+    async save() { /* noop */ },
+  };
+}
+
+let storePromise: Promise<KVStore> | null = null;
+async function backend(): Promise<KVStore> {
+  if (!storePromise) {
+    storePromise = (async () => (await openTauriStore()) ?? makeLocalStorageShim())();
+  }
+  return storePromise;
+}
 
 interface AuthState {
   accessToken: string | null;
@@ -19,14 +67,6 @@ interface AuthState {
   setUser: (u: UserProfile) => Promise<void>;
 }
 
-let storePromise: Promise<Store> | null = null;
-async function secureStore(): Promise<Store> {
-  if (!storePromise) {
-    storePromise = load("auth.dat", { autoSave: false });
-  }
-  return storePromise;
-}
-
 export const useAuthStore = create<AuthState>((set, get) => ({
   accessToken: null,
   refreshToken: null,
@@ -35,7 +75,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   async hydrate() {
     try {
-      const s = await secureStore();
+      const s = await backend();
       const accessToken = (await s.get<string>("accessToken")) ?? null;
       const refreshToken = (await s.get<string>("refreshToken")) ?? null;
       const user = (await s.get<UserProfile>("user")) ?? null;
@@ -46,7 +86,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   async login(tokens, user) {
-    const s = await secureStore();
+    const s = await backend();
     await s.set("accessToken", tokens.access_token);
     await s.set("refreshToken", tokens.refresh_token);
     await s.set("user", user);
@@ -55,7 +95,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   async logout() {
-    const s = await secureStore();
+    const s = await backend();
     await s.delete("accessToken");
     await s.delete("refreshToken");
     await s.delete("user");
@@ -71,21 +111,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         "/api/v1/auth/refresh",
         { refresh_token: refreshToken },
       );
-      const s = await secureStore();
+      const s = await backend();
       await s.set("accessToken", res.access_token);
       await s.set("refreshToken", res.refresh_token);
       await s.save();
       set({ accessToken: res.access_token, refreshToken: res.refresh_token });
       return true;
     } catch {
-      // Refresh failed → force logout so UI sends the user to /login.
       await get().logout();
       return false;
     }
   },
 
   async setUser(u) {
-    const s = await secureStore();
+    const s = await backend();
     await s.set("user", u);
     await s.save();
     set({ user: u });

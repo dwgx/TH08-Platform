@@ -22,8 +22,9 @@ type Deps struct {
 	Auth   *AuthService
 	Users  *UsersService
 	Rooms  *RoomsService
+	Lobby  *LobbyService
 	Demo   *DemoService
-	// Friends, Groups, Channels, DMs, Lobby, Notifications, Games — add as they land
+	// Friends, Groups, Channels, DMs, Notifications — add as they land
 }
 
 func NewRouter(d *Deps) http.Handler {
@@ -34,12 +35,14 @@ func NewRouter(d *Deps) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 
+	// CORS: auth is Bearer token (header) not cookies, so AllowCredentials
+	// can stay false which lets us keep the "*" wildcard origin.
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   d.Cfg.CORSAllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Request-ID"},
 		ExposedHeaders:   []string{"X-Request-ID"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           300,
 	}))
 
@@ -99,6 +102,11 @@ func NewRouter(d *Deps) http.Handler {
 			r.Route("/friends", func(r chi.Router) {
 				// handlers stubbed in friends_handler.go
 			})
+			r.Route("/lobby", func(r chi.Router) {
+				r.Get ("/messages", d.Lobby.ListMessages)
+				r.Post("/messages", d.Lobby.PostMessage)
+			})
+
 			r.Route("/rooms", func(r chi.Router) {
 				r.Get ("/",                   d.Rooms.List)
 				r.Post("/",                   d.Rooms.Create)
