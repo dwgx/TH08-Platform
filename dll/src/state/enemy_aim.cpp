@@ -926,75 +926,125 @@ bool install()
                                          std::memory_order_relaxed);
     }
 
+    // Per-hook env gates. Crash diagnosis: when all 10 are enabled the user
+    // reported a stage-entry crash. Whole-function spoofs (ENM/SPC) and the
+    // table-block hook (TBL) are the most ABI-risky, so they are default-OFF
+    // until verified. Function-level helpers (FVAR/PVAR/SEC/BNC/WRP/GATE/VEC)
+    // are default-ON because their hot paths went through user testing in
+    // earlier batches' siblings (item_routing/dual_collision share the spoof
+    // pattern for FVAR/SEC/BNC/etc).
+    //
+    // Override individually via TH08_PLATFORM_AIM_<NAME>=0 / =1.
+    struct AimGate {
+        const char* env;
+        bool default_on;
+        bool wanted;
+    };
+    AimGate gate_fvar{"TH08_PLATFORM_AIM_FVAR", true,  false};
+    AimGate gate_pvar{"TH08_PLATFORM_AIM_PVAR", true,  false};
+    AimGate gate_sec {"TH08_PLATFORM_AIM_SEC",  true,  false};
+    AimGate gate_bnc {"TH08_PLATFORM_AIM_BNC",  true,  false};
+    AimGate gate_wrp {"TH08_PLATFORM_AIM_WRP",  true,  false};
+    AimGate gate_gate{"TH08_PLATFORM_AIM_GATE", true,  false};
+    AimGate gate_vec {"TH08_PLATFORM_AIM_VEC",  true,  false};
+    AimGate gate_enm {"TH08_PLATFORM_AIM_ENM",  false, false};
+    AimGate gate_spc {"TH08_PLATFORM_AIM_SPC",  false, false};
+    AimGate gate_tbl {"TH08_PLATFORM_AIM_TBL",  false, false};
+    auto resolve_gate = [](AimGate& g) {
+        g.wanted = env_flag(g.env, g.default_on);
+    };
+    resolve_gate(gate_fvar); resolve_gate(gate_pvar); resolve_gate(gate_sec);
+    resolve_gate(gate_bnc);  resolve_gate(gate_wrp);  resolve_gate(gate_gate);
+    resolve_gate(gate_vec);  resolve_gate(gate_enm);  resolve_gate(gate_spc);
+    resolve_gate(gate_tbl);
+
+    th08_platform::log_line(
+        "enemy_aim: gates FVAR=%d PVAR=%d SEC=%d BNC=%d WRP=%d GATE=%d VEC=%d ENM=%d SPC=%d TBL=%d "
+        "(set TH08_PLATFORM_AIM_<NAME>=1/0 to override)",
+        gate_fvar.wanted, gate_pvar.wanted, gate_sec.wanted, gate_bnc.wanted,
+        gate_wrp.wanted, gate_gate.wanted, gate_vec.wanted, gate_enm.wanted,
+        gate_spc.wanted, gate_tbl.wanted);
+
     th08_platform::log_line(
         "enemy_aim: hooking FVAR=%p PVAR=%p SEC=%p BNC=%p WRP=%p GATE=%p VEC=%p ENM=%p SPC=%p TBL=%p",
         float_target, ptr_target, secondary_target, bounce_target,
         wrap_target, spawn_target, vector_target, manager_target,
         spell_target, table_target);
 
-    if (create_hook_checked(const_cast<void*>(float_target),
+    if (gate_fvar.wanted &&
+        create_hook_checked(const_cast<void*>(float_target),
                             reinterpret_cast<void*>(&hooked_420120),
                             reinterpret_cast<LPVOID*>(&g_orig_float_resolver),
                             "sub_420120") != MH_OK) {
+        cleanup_hooks();
         return false;
     }
-    if (create_hook_checked(const_cast<void*>(ptr_target),
+    if (gate_pvar.wanted &&
+        create_hook_checked(const_cast<void*>(ptr_target),
                             reinterpret_cast<void*>(&hooked_420950),
                             reinterpret_cast<LPVOID*>(&g_orig_pointer_resolver),
                             "sub_420950") != MH_OK) {
         cleanup_hooks();
         return false;
     }
-    if (create_hook_checked(const_cast<void*>(secondary_target),
+    if (gate_sec.wanted &&
+        create_hook_checked(const_cast<void*>(secondary_target),
                             reinterpret_cast<void*>(&hooked_41F420),
                             reinterpret_cast<LPVOID*>(&g_orig_secondary_resolver),
                             "sub_41F420") != MH_OK) {
         cleanup_hooks();
         return false;
     }
-    if (create_hook_checked(const_cast<void*>(bounce_target),
+    if (gate_bnc.wanted &&
+        create_hook_checked(const_cast<void*>(bounce_target),
                             reinterpret_cast<void*>(&hooked_422020),
                             reinterpret_cast<LPVOID*>(&g_orig_bounce_helper),
                             "sub_422020") != MH_OK) {
         cleanup_hooks();
         return false;
     }
-    if (create_hook_checked(const_cast<void*>(wrap_target),
+    if (gate_wrp.wanted &&
+        create_hook_checked(const_cast<void*>(wrap_target),
                             reinterpret_cast<void*>(&hooked_4224A0),
                             reinterpret_cast<LPVOID*>(&g_orig_wrap_helper),
                             "sub_4224A0") != MH_OK) {
         cleanup_hooks();
         return false;
     }
-    if (create_hook_checked(const_cast<void*>(spawn_target),
+    if (gate_gate.wanted &&
+        create_hook_checked(const_cast<void*>(spawn_target),
                             reinterpret_cast<void*>(&hooked_422720),
                             reinterpret_cast<LPVOID*>(&g_orig_spawn_gate),
                             "sub_422720") != MH_OK) {
         cleanup_hooks();
         return false;
     }
-    if (create_hook_checked(const_cast<void*>(vector_target),
+    if (gate_vec.wanted &&
+        create_hook_checked(const_cast<void*>(vector_target),
                             reinterpret_cast<void*>(&hooked_428310),
                             reinterpret_cast<LPVOID*>(&g_orig_vector_helper),
                             "sub_428310") != MH_OK) {
         cleanup_hooks();
         return false;
     }
-    if (create_hook_checked(const_cast<void*>(manager_target),
+    if (gate_enm.wanted &&
+        create_hook_checked(const_cast<void*>(manager_target),
                             reinterpret_cast<void*>(&hooked_42C660),
                             reinterpret_cast<LPVOID*>(&g_orig_enemy_manager_on_update),
                             "EnemyManager::OnUpdate") != MH_OK) {
         cleanup_hooks();
         return false;
     }
-    if (create_hook_checked(const_cast<void*>(spell_target),
+    if (gate_spc.wanted &&
+        create_hook_checked(const_cast<void*>(spell_target),
                             reinterpret_cast<void*>(&hooked_416B90),
                             reinterpret_cast<LPVOID*>(&g_orig_spellcard_on_update),
                             "Spellcard::SpellcardOnUpdateImpl") != MH_OK) {
         cleanup_hooks();
         return false;
     }
-    if (create_hook_checked(const_cast<void*>(table_target),
+    if (gate_tbl.wanted &&
+        create_hook_checked(const_cast<void*>(table_target),
                             reinterpret_cast<void*>(&hooked_426C40),
                             reinterpret_cast<LPVOID*>(&g_orig_target_acquire_block),
                             "0x426C40 block") != MH_OK) {
@@ -1002,16 +1052,50 @@ bool install()
         return false;
     }
 
-    if (enable_hook_checked(const_cast<void*>(float_target), "sub_420120") != MH_OK ||
-        enable_hook_checked(const_cast<void*>(ptr_target), "sub_420950") != MH_OK ||
-        enable_hook_checked(const_cast<void*>(secondary_target), "sub_41F420") != MH_OK ||
-        enable_hook_checked(const_cast<void*>(bounce_target), "sub_422020") != MH_OK ||
-        enable_hook_checked(const_cast<void*>(wrap_target), "sub_4224A0") != MH_OK ||
-        enable_hook_checked(const_cast<void*>(spawn_target), "sub_422720") != MH_OK ||
-        enable_hook_checked(const_cast<void*>(vector_target), "sub_428310") != MH_OK ||
-        enable_hook_checked(const_cast<void*>(manager_target), "EnemyManager::OnUpdate") != MH_OK ||
-        enable_hook_checked(const_cast<void*>(spell_target), "Spellcard::SpellcardOnUpdateImpl") != MH_OK ||
+    // Enable phase. cleanup_hooks() inspects g_orig_* pointers, so a hook
+    // that never created (gate off) will be safely skipped here too.
+    bool enable_ok = true;
+    if (g_orig_float_resolver &&
+        enable_hook_checked(const_cast<void*>(float_target), "sub_420120") != MH_OK) {
+        enable_ok = false;
+    }
+    if (enable_ok && g_orig_pointer_resolver &&
+        enable_hook_checked(const_cast<void*>(ptr_target), "sub_420950") != MH_OK) {
+        enable_ok = false;
+    }
+    if (enable_ok && g_orig_secondary_resolver &&
+        enable_hook_checked(const_cast<void*>(secondary_target), "sub_41F420") != MH_OK) {
+        enable_ok = false;
+    }
+    if (enable_ok && g_orig_bounce_helper &&
+        enable_hook_checked(const_cast<void*>(bounce_target), "sub_422020") != MH_OK) {
+        enable_ok = false;
+    }
+    if (enable_ok && g_orig_wrap_helper &&
+        enable_hook_checked(const_cast<void*>(wrap_target), "sub_4224A0") != MH_OK) {
+        enable_ok = false;
+    }
+    if (enable_ok && g_orig_spawn_gate &&
+        enable_hook_checked(const_cast<void*>(spawn_target), "sub_422720") != MH_OK) {
+        enable_ok = false;
+    }
+    if (enable_ok && g_orig_vector_helper &&
+        enable_hook_checked(const_cast<void*>(vector_target), "sub_428310") != MH_OK) {
+        enable_ok = false;
+    }
+    if (enable_ok && g_orig_enemy_manager_on_update &&
+        enable_hook_checked(const_cast<void*>(manager_target), "EnemyManager::OnUpdate") != MH_OK) {
+        enable_ok = false;
+    }
+    if (enable_ok && g_orig_spellcard_on_update &&
+        enable_hook_checked(const_cast<void*>(spell_target), "Spellcard::SpellcardOnUpdateImpl") != MH_OK) {
+        enable_ok = false;
+    }
+    if (enable_ok && g_orig_target_acquire_block &&
         enable_hook_checked(const_cast<void*>(table_target), "0x426C40 block") != MH_OK) {
+        enable_ok = false;
+    }
+    if (!enable_ok) {
         cleanup_hooks();
         return false;
     }
