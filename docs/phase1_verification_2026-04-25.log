@@ -1,0 +1,51 @@
+
+==== th08_platform session start 2026-04-25 09:55:33 ====
+[09:55:33] th08_platform.dll attached; starting phase 0 hooks
+[09:55:33] hooking GameManager::OnUpdate at 00439BC7
+[09:55:33] GameManager::OnUpdate hook enabled
+[09:55:33] phase 0 ready
+[09:55:39] state warning: g_Rng size is TBD; capture skipped
+[09:55:39] state warning: g_Chain size is TBD; capture skipped
+[09:55:39] state warning: g_EnemyManager size is TBD; capture skipped
+[09:55:39] state warning: g_BulletManager size is TBD; capture skipped
+[09:55:39] state restore self-test: ok
+[09:55:40] GameManager::OnUpdate tick: frame 60
+[09:55:40] captured: 1928016 bytes across 15 regions
+[09:55:41] GameManager::OnUpdate tick: frame 120
+[09:55:41] captured: 1928016 bytes across 15 regions
+[09:55:42] GameManager::OnUpdate tick: frame 180
+[09:55:42] captured: 1928016 bytes across 15 regions
+[09:55:43] GameManager::OnUpdate tick: frame 240
+[09:55:43] captured: 1928016 bytes across 15 regions
+[09:55:44] GameManager::OnUpdate tick: frame 300
+[09:55:44] captured: 1928016 bytes across 15 regions
+[09:55:45] GameManager::OnUpdate tick: frame 360
+[09:55:45] captured: 1928016 bytes across 15 regions
+[09:55:46] GameManager::OnUpdate tick: frame 420
+[09:55:46] captured: 1928016 bytes across 15 regions
+[09:55:47] GameManager::OnUpdate tick: frame 480
+[09:55:47] captured: 1928016 bytes across 15 regions
+[09:55:48] GameManager::OnUpdate tick: frame 540
+[09:55:48] captured: 1928016 bytes across 15 regions
+[09:55:49] GameManager::OnUpdate tick: frame 600
+[09:55:49] captured: 1928016 bytes across 15 regions
+[09:55:50] GameManager::OnUpdate tick: frame 660
+[09:55:50] captured: 1928016 bytes across 15 regions
+[09:55:51] GameManager::OnUpdate tick: frame 720
+[09:55:51] captured: 1928016 bytes across 15 regions
+[09:55:52] GameManager::OnUpdate tick: frame 780
+[09:55:52] captured: 1928016 bytes across 15 regions
+[09:55:53] GameManager::OnUpdate tick: frame 840
+[09:55:53] captured: 1928016 bytes across 15 regions
+[09:55:54] GameManager::OnUpdate tick: frame 900
+[09:55:54] captured: 1928016 bytes across 15 regions
+[09:55:55] GameManager::OnUpdate tick: frame 960
+[09:55:55] captured: 1928016 bytes across 15 regions
+[09:55:56] GameManager::OnUpdate tick: frame 1020
+[09:55:56] captured: 1928016 bytes across 15 regions
+[09:55:57] GameManager::OnUpdate tick: frame 1080
+[09:55:57] captured: 1928016 bytes across 15 regions
+[09:55:58] GameManager::OnUpdate tick: frame 1140
+[09:55:58] captured: 1928016 bytes across 15 regions
+[09:55:59] GameManager::OnUpdate tick: frame 1200
+[09:55:59] captured: 1928016 bytes across 15 regions
