@@ -16,18 +16,20 @@ namespace {
 // `this` in EAX (standard MSVC __thiscall constructor convention).
 constexpr std::uintptr_t kAddr_Player_ctor = 0x449ca0;
 
-// Chain registration primitives, all from mapping.csv:
+// Chain primitives, all from mapping.csv:
 //   row 557: Chain::AddToCalcChain @ 0x43c880, __thiscall(Chain*, ChainElem*, u32)
 //   row 558: Chain::AddToDrawChain @ 0x43c960, __thiscall(Chain*, ChainElem*, i32)
-//   sub_43CE60 (no mapping.csv name): __stdcall(func_ptr) -> ChainElem*
-//     - allocates 32-byte ChainElem, stores func_ptr inside, returns it.
+//   row 564: Chain::CreateElem    @ 0x43ce60, __thiscall(Chain*, u32) -> ChainElem*
+//            (the u32 is reinterpreted as the func_ptr to register)
+//   row 565: Chain::Cut           @ 0x43cf10, __thiscall(Chain*, ChainElem*)
 // Chain element layout (verified from RegisterChain @ 0x44C230):
 //   +0x08 = AddedCallback function pointer
 //   +0x0C = DeletedCallback function pointer
 //   +0x1C = context pointer (target of OnUpdate's `this`)
-constexpr std::uintptr_t kAddr_AllocChainElem  = 0x43ce60;
+constexpr std::uintptr_t kAddr_CreateElem      = 0x43ce60;
 constexpr std::uintptr_t kAddr_AddToCalcChain  = 0x43c880;
 constexpr std::uintptr_t kAddr_AddToDrawChain  = 0x43c960;
+constexpr std::uintptr_t kAddr_ChainCut        = 0x43cf10;
 constexpr std::uintptr_t kAddr_Player_OnUpdate         = 0x44c390;
 constexpr std::uintptr_t kAddr_Player_OnDrawHighPrio   = 0x44d530;
 constexpr std::uintptr_t kAddr_Player_OnDrawLowPrio    = 0x44d630;
@@ -41,9 +43,10 @@ constexpr std::int32_t kPriority_PlayerDrawHigh  = 9;
 constexpr std::int32_t kPriority_PlayerDrawLow   = 10;
 
 using PlayerCtor_t       = void*(__thiscall*)(void* this_);
-using AllocChainElem_t   = void*(__stdcall*)(void* func_ptr);
+using CreateElem_t       = void*(__thiscall*)(void* chain_this, std::uint32_t func_or_id);
 using AddToCalcChain_t   = std::int32_t(__thiscall*)(void* chain_this, void* elem, std::uint32_t prio);
 using AddToDrawChain_t   = std::int32_t(__thiscall*)(void* chain_this, void* elem, std::int32_t prio);
+using ChainCut_t         = void(__thiscall*)(void* chain_this, void* elem);
 
 bool g_constructed = false;
 bool g_registered = false;
@@ -154,16 +157,16 @@ bool Register()
     log_line("player2: WARNING - chain registration without AddedCallback "
              "will likely crash on first tick. Proceeding because env opted in.");
 
-    auto* const alloc_elem  = reinterpret_cast<AllocChainElem_t>(kAddr_AllocChainElem);
+    auto* const create_elem = reinterpret_cast<CreateElem_t>(kAddr_CreateElem);
     auto* const add_calc    = reinterpret_cast<AddToCalcChain_t>(kAddr_AddToCalcChain);
     auto* const add_draw    = reinterpret_cast<AddToDrawChain_t>(kAddr_AddToDrawChain);
     void* const chain_this  = reinterpret_cast<void*>(globals::kAddr_g_Chain);
 
     bool ok = false;
     __try {
-        g_calcChain     = alloc_elem(reinterpret_cast<void*>(kAddr_Player_OnUpdate));
-        g_drawHighChain = alloc_elem(reinterpret_cast<void*>(kAddr_Player_OnDrawHighPrio));
-        g_drawLowChain  = alloc_elem(reinterpret_cast<void*>(kAddr_Player_OnDrawLowPrio));
+        g_calcChain     = create_elem(chain_this, static_cast<std::uint32_t>(kAddr_Player_OnUpdate));
+        g_drawHighChain = create_elem(chain_this, static_cast<std::uint32_t>(kAddr_Player_OnDrawHighPrio));
+        g_drawLowChain  = create_elem(chain_this, static_cast<std::uint32_t>(kAddr_Player_OnDrawLowPrio));
 
         if (g_calcChain == nullptr || g_drawHighChain == nullptr || g_drawLowChain == nullptr) {
             log_line("player2: chain elem alloc failed (calc=%p high=%p low=%p)",
@@ -210,24 +213,25 @@ bool Register()
 
 void Unregister()
 {
-    // We don't have a verified Chain::Cut primitive call yet (CutChain is
-    // at 0x44dd10 but it's a static method that operates on the global
-    // g_PlayerCalcChain etc. directly). For 5a, "unregister" means we
-    // only free our heap-allocated chain elem records here - the chain
-    // dispatcher may still hold pointers to them, so we MUST be sure
-    // we never registered before letting them be freed.
-    //
-    // For now: if we never successfully registered, just null out our
-    // local pointers. If we did register, log a warning and leak (safer
-    // than freeing while ZUN's chain still holds the pointer).
-    if (g_registered) {
-        log_line("player2: Unregister() with registered chain - LEAKING elems "
-                 "to avoid dangling-pointer crash. Implement Chain::Cut binding in 5b.");
-        g_registered = false;
-        // Intentionally don't null the pointers; they're now orphaned but
-        // ZUN's chain still references them.
-        return;
+    // Chain::Cut (mapping.csv row 565 @ 0x43cf10) removes a ChainElem
+    // from the chain's linked list. Safe to call even if the elem isn't
+    // currently in the chain (Cut is idempotent per RegisterChain
+    // semantics; CutImpl at 0x43cf50 is the worker).
+    auto* const chain_cut = reinterpret_cast<ChainCut_t>(kAddr_ChainCut);
+    void* const chain_this = reinterpret_cast<void*>(globals::kAddr_g_Chain);
+
+    __try {
+        if (g_calcChain != nullptr)     chain_cut(chain_this, g_calcChain);
+        if (g_drawHighChain != nullptr) chain_cut(chain_this, g_drawHighChain);
+        if (g_drawLowChain != nullptr)  chain_cut(chain_this, g_drawLowChain);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        log_line("player2: SEH during Chain::Cut; chain may be in inconsistent state");
     }
+
+    if (g_registered) {
+        log_line("player2: unregistered from chain");
+    }
+    g_registered = false;
     g_calcChain = nullptr;
     g_drawHighChain = nullptr;
     g_drawLowChain = nullptr;

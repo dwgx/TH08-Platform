@@ -63,7 +63,8 @@ bool IsConstructed() noexcept;
 // Unregister() to clean up partial state.
 bool Register();
 
-// Removes g_Player2 from the chains. Safe to call when not registered.
+// Removes g_Player2 from the chains via Chain::Cut (0x43cf10). Safe to
+// call when not registered (idempotent on each individual chain).
 void Unregister();
 
 // True iff the last Register() call succeeded and Unregister() hasn't run.
