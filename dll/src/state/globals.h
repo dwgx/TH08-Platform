@@ -6,6 +6,7 @@
 namespace th08_platform::globals {
 
 inline constexpr std::uintptr_t kAddr_g_GameManager = 0x0160f508;
+inline constexpr std::uintptr_t kAddr_g_Player = 0x017d5ef8;
 inline constexpr std::uintptr_t kAddr_g_Rng = 0x0164d520;
 inline constexpr std::uintptr_t kAddr_g_CurFrameInput = 0x0164d528;
 inline constexpr std::uintptr_t kAddr_g_LastFrameInput = 0x0164d530;
@@ -23,6 +24,15 @@ inline constexpr std::uintptr_t kAddr_g_Supervisor = 0x017ce758;
 inline constexpr std::size_t kOffset_GameManager_globals = 0x0008;
 
 inline constexpr std::size_t kSize_GameManager = 0x3de3c;
+// Verified by IDA: Player::RegisterChain @ 0x44c230 calls
+//   memset(&byte_17D5EF8, 0, 0xE2B30u)
+// to clear g_Player on init. So sizeof(Player) is EXACTLY 0xE2B30 bytes.
+// This includes two heap-pointer FIELDS at +0xE2A74 / +0xE2A78 (shtFile1/2
+// slots, freed by Player::DeletedCallback) — those buffers themselves
+// must be heap-journaled for rollback (Phase 4 already supports this).
+inline constexpr std::size_t kSize_Player = 0xE2B30;
+inline constexpr std::size_t kOffset_Player_shtFile1Slot = 0xE2A74;
+inline constexpr std::size_t kOffset_Player_shtFile2Slot = 0xE2A78;
 inline constexpr std::size_t kSize_ZunGlobals = 0x00e4;
 inline constexpr std::size_t kSize_Rng = 0x0008;  // Verified: u16 seed + u32 generationCount + 2B pad.
 inline constexpr std::size_t kSize_CurFrameInput = 0x0002;
