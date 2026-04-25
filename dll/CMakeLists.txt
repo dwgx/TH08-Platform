@@ -46,6 +46,7 @@ add_library(th08_platform SHARED
     src/net/rollback.cpp
     src/state/frame_state.cpp
     src/state/heap_journal.cpp
+    src/state/player2.cpp
 )
 target_include_directories(th08_platform PRIVATE
     src

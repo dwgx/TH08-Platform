@@ -11,6 +11,7 @@
 #include "hooks/input.h"
 #include "net/lockstep.h"
 #include "net/rollback.h"
+#include "state/player2.h"
 
 namespace {
 std::uint16_t read_listen_port()
@@ -71,6 +72,20 @@ DWORD WINAPI dll_init_thread(LPVOID)
 
     if (peer_len != 0 && !net_ok) {
         th08_platform::log_line("phase 4 net init failed; staying local-only");
+    }
+
+    // Sub-phase 5a opt-in: set TH08_PLATFORM_TEST_PLAYER2=1 to construct
+    // g_Player2 right after init. This is dangerous if the game hasn't
+    // finished initializing AnmManager/BulletManager - prefer to set this
+    // ONLY after manually playing past the title screen, then re-attaching.
+    char p2_env[8] = {};
+    if (GetEnvironmentVariableA("TH08_PLATFORM_TEST_PLAYER2", p2_env,
+                                static_cast<DWORD>(sizeof(p2_env))) > 0 &&
+        p2_env[0] == '1') {
+        th08_platform::log_line("phase 5a: TH08_PLATFORM_TEST_PLAYER2=1, attempting g_Player2 ctor");
+        const bool p2_ok = th08_platform::player2::Construct();
+        th08_platform::log_line("phase 5a: g_Player2 construct %s",
+                                p2_ok ? "ok" : "FAILED");
     }
 
     if (game_loop_ok && input_ok && rollback_audio_ok && net_ok) {
