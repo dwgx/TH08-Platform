@@ -154,8 +154,30 @@ DWORD WINAPI dll_init_thread(LPVOID)
     }
 
     // Sub-phase 5i Batch C/D: enemy aim routing.
-    if (multiplayer && env_flag("TH08_PLATFORM_ENEMY_AIM", true)) {
-        th08_platform::log_line("phase 5i: installing enemy_aim hooks");
+    //
+    // DEFAULT OFF as of 2026-04-26 after runtime testing exposed two design
+    // flaws:
+    //   (1) sub_428310 ("VEC" hook) is a generic vector helper called
+    //       1500+ times per second by background code even when no enemies
+    //       are firing. Each call entered our spoof path (write
+    //       g_Player.pos.x/y, call original, restore), pushing the frame
+    //       budget past 16.67ms and dropping the game from 60fps to 24fps.
+    //   (2) The 0x426C40 table-dispatched block (TBL), the EnemyManager
+    //       whole-function spoof (ENM), and the Spellcard whole-function
+    //       spoof (SPC) have ABI risk (non-function-aligned hook target,
+    //       non-local exits inside ~6KB functions). With all 10 hooks live
+    //       the game froze during enemy spawn.
+    //
+    // The enemy_aim code is kept (env opt-in) but won't auto-install.
+    // Future redesign: VEC must use return-address gating like
+    // item_routing's sub_44C1B0 (only route when caller is an enemy
+    // firing site, pass through otherwise). ENM/SPC may need per-branch
+    // hooks instead of whole-function spoof.
+    //
+    // Opt-in for testing: TH08_PLATFORM_ENEMY_AIM=1, optionally narrow
+    // per hook via TH08_PLATFORM_AIM_<NAME>=0/1.
+    if (multiplayer && env_flag("TH08_PLATFORM_ENEMY_AIM", false)) {
+        th08_platform::log_line("phase 5i: installing enemy_aim hooks (env opt-in)");
         const bool aim_ok = th08_platform::state::enemy_aim::install();
         th08_platform::log_line("phase 5i: enemy_aim install %s",
                                 aim_ok ? "ok" : "FAILED");
