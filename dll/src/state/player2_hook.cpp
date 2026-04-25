@@ -10,6 +10,7 @@
 #include "globals.h"
 #include "p2_lives.h"
 #include "dual_collision.h"
+#include "enemy_aim.h"
 #include "item_routing.h"
 
 namespace th08_platform::state {
@@ -233,6 +234,7 @@ void on_frame_tick(unsigned long long frame_no)
     const int p2_lives = th08_platform::state::p2_lives::snapshot_p2_lives();
     const auto hits = th08_platform::state::dual_collision::snapshot_hit_counters();
     const auto items = th08_platform::state::item_routing::snapshot_counters();
+    const auto aim = th08_platform::state::enemy_aim::snapshot_counters();
     const unsigned long long redirects =
         th08_platform::state::p2_lives::snapshot_redirect_count();
     th08_platform::log_line(
@@ -248,6 +250,21 @@ void on_frame_tick(unsigned long long frame_no)
         items.routed_p1, items.routed_p2, items.routed_calls,
         items.attracted_p1, items.attracted_p2,
         items.trigger_p1, items.trigger_p2);
+    th08_platform::log_line(
+        "HUD aim frame=%llu | calls=%llu | FVAR %llu/%llu | PVAR %llu/%llu | SEC %llu/%llu | "
+        "BNC %llu/%llu | WRP %llu/%llu | GATE %llu/%llu | VEC %llu/%llu | ENM %llu/%llu | "
+        "SPC %llu/%llu | TBL %llu/%llu",
+        frame_no, aim.calls_total,
+        aim.float_resolver.p1, aim.float_resolver.p2,
+        aim.pointer_resolver.p1, aim.pointer_resolver.p2,
+        aim.secondary_resolver.p1, aim.secondary_resolver.p2,
+        aim.bounce_helper.p1, aim.bounce_helper.p2,
+        aim.wrap_helper.p1, aim.wrap_helper.p2,
+        aim.spawn_gate.p1, aim.spawn_gate.p2,
+        aim.vector_helper.p1, aim.vector_helper.p2,
+        aim.enemy_manager.p1, aim.enemy_manager.p2,
+        aim.spellcard.p1, aim.spellcard.p2,
+        aim.table_block.p1, aim.table_block.p2);
 }
 
 void uninstall_player2_hook()

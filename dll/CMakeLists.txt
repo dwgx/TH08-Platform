@@ -49,6 +49,7 @@ add_library(th08_platform SHARED
     src/state/player2.cpp
     src/state/player2_hook.cpp
     src/state/dual_collision.cpp
+    src/state/enemy_aim.cpp
     src/state/item_routing.cpp
     src/state/p2_input.cpp
     src/state/p2_lives.cpp

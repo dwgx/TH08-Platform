@@ -14,6 +14,7 @@
 #include "state/player2.h"
 #include "state/player2_hook.h"
 #include "state/dual_collision.h"
+#include "state/enemy_aim.h"
 #include "state/item_routing.h"
 #include "state/p2_input.h"
 #include "state/p2_lives.h"
@@ -152,6 +153,14 @@ DWORD WINAPI dll_init_thread(LPVOID)
                                 item_ok ? "ok" : "FAILED");
     }
 
+    // Sub-phase 5i Batch C/D: enemy aim routing.
+    if (multiplayer && env_flag("TH08_PLATFORM_ENEMY_AIM", true)) {
+        th08_platform::log_line("phase 5i: installing enemy_aim hooks");
+        const bool aim_ok = th08_platform::state::enemy_aim::install();
+        th08_platform::log_line("phase 5i: enemy_aim install %s",
+                                aim_ok ? "ok" : "FAILED");
+    }
+
     // Sub-phase 5d: per-player input routing.
     if (multiplayer && env_flag("TH08_PLATFORM_P2_INPUT", true)) {
         th08_platform::log_line("phase 5d: installing OnUpdate input-swap hook");
@@ -210,6 +219,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID /*reserved*/)
         th08_platform::state::hud::uninstall();
         th08_platform::state::p2_lives::uninstall_hook();
         th08_platform::state::p2_input::uninstall_hook();
+        th08_platform::state::enemy_aim::uninstall();
         th08_platform::state::item_routing::uninstall();
         th08_platform::state::dual_collision::uninstall_hook();
         th08_platform::state::uninstall_player2_hook();
