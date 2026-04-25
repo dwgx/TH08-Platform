@@ -144,19 +144,23 @@ void on_frame_tick(unsigned long long frame_no)
     if (frame_no % log_interval != 0) return;
 
     auto dump = [&](const char* tag, std::uint8_t* p) {
+        // Derived current position = hitbox midpoint (in pixel coords).
+        // The +0x3D4/+0x3D8 fields turned out to be static "spawn anchor"
+        // values stuck at (0.82, 1.40) — NOT current pos. The real pos
+        // field is TBD pending IDA recon (codex 5e batch); for now we
+        // infer pos from the hitbox AABB which IS verified-correct.
         const int st = static_cast<int>(p[0]);
-        const float pa_x = *reinterpret_cast<float*>(p + 0x3D4);
-        const float pa_y = *reinterpret_cast<float*>(p + 0x3E0);
-        const float pb_x = *reinterpret_cast<float*>(p + 0x3D8);
-        const float pb_y = *reinterpret_cast<float*>(p + 0x3E4);
         const float hb_min_x = *reinterpret_cast<float*>(p + 0x3BC);
         const float hb_min_y = *reinterpret_cast<float*>(p + 0x3C0);
         const float hb_max_x = *reinterpret_cast<float*>(p + 0x3C8);
         const float hb_max_y = *reinterpret_cast<float*>(p + 0x3CC);
+        const float pos_x = (hb_min_x + hb_max_x) * 0.5f;
+        const float pos_y = (hb_min_y + hb_max_y) * 0.5f;
+        const float hb_w  = hb_max_x - hb_min_x;
+        const float hb_h  = hb_max_y - hb_min_y;
         th08_platform::log_line(
-            "%s frame=%llu state=%d posA=(%.2f,%.2f) posB=(%.2f,%.2f) hb=[(%.2f,%.2f),(%.2f,%.2f)]",
-            tag, frame_no, st, pa_x, pa_y, pb_x, pb_y,
-            hb_min_x, hb_min_y, hb_max_x, hb_max_y);
+            "%s frame=%llu state=%d pos=(%.1f,%.1f) hb=%.1fx%.1f",
+            tag, frame_no, st, pos_x, pos_y, hb_w, hb_h);
     };
     // p1: read g_Player (the singleton ZUN constructed at 0x17D5EF8).
     // p2: read our buffer. Compare drift over time:
