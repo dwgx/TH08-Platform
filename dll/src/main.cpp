@@ -12,6 +12,7 @@
 #include "net/lockstep.h"
 #include "net/rollback.h"
 #include "state/player2.h"
+#include "state/player2_hook.h"
 
 namespace {
 std::uint16_t read_listen_port()
@@ -74,7 +75,21 @@ DWORD WINAPI dll_init_thread(LPVOID)
         th08_platform::log_line("phase 4 net init failed; staying local-only");
     }
 
-    // Sub-phase 5a opt-in:
+    // Sub-phase 5b opt-in: TH08_PLATFORM_PLAYER2_AUTO=1 hooks
+    // Player::RegisterChain (0x44C230); on the first invocation, our
+    // detour runs the original then auto-Construct() + Register()
+    // g_Player2. This is the auto-flow that 5c+ will build on.
+    char p2_auto_env[8] = {};
+    if (GetEnvironmentVariableA("TH08_PLATFORM_PLAYER2_AUTO", p2_auto_env,
+                                static_cast<DWORD>(sizeof(p2_auto_env))) > 0 &&
+        p2_auto_env[0] == '1') {
+        th08_platform::log_line("phase 5b: TH08_PLATFORM_PLAYER2_AUTO=1, installing Player::RegisterChain hook");
+        const bool hook_ok = th08_platform::state::install_player2_hook();
+        th08_platform::log_line("phase 5b: hook install %s",
+                                hook_ok ? "ok" : "FAILED");
+    }
+
+    // Sub-phase 5a opt-in (manual / one-shot, distinct from 5b's auto-hook):
     //   TH08_PLATFORM_TEST_PLAYER2=1 -> Construct() only (alloc + ctor)
     //   TH08_PLATFORM_TEST_PLAYER2=2 -> Construct() + Register() (chain)
     //
@@ -125,6 +140,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID /*reserved*/)
         CreateThread(nullptr, 0, dll_init_thread, nullptr, 0, nullptr);
         break;
     case DLL_PROCESS_DETACH:
+        th08_platform::state::uninstall_player2_hook();
         th08_platform::hooks::uninstall_input_hook();
         th08_platform::hooks::uninstall_game_loop_hook();
         th08_platform::net::shutdown();
