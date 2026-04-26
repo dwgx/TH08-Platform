@@ -54,6 +54,7 @@ enum Control : std::int32_t {
     Ctrl_Key             = 2,
     Ctrl_Set_InitSetting = 3,
     Ctrl_Try_Resync      = 4,
+    Ctrl_Ghost           = 5,
 };
 
 enum InGameCtrlType : std::int32_t {
@@ -75,6 +76,7 @@ struct CtrlPack {
         Bits<16> keys[kKeyPackFrameNum];
         struct { std::int32_t delay; std::int32_t ver; } init_setting;
         struct { std::int32_t frame_to_re_sync; } resync_setting;
+        struct { float pos_x; float pos_y; } ghost_pos;
     };
     InGameCtrlType igc_type[kKeyPackFrameNum];
     std::uint16_t rng_seed[kKeyPackFrameNum];

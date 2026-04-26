@@ -74,6 +74,11 @@ struct LockstepState {
     bool host_seed_generated = false;
     std::uint32_t peer_received_seed = 0;
     bool peer_seed_received = false;
+    float peer_ghost_x = 0.0f;
+    float peer_ghost_y = 0.0f;
+    std::int32_t peer_ghost_frame = -1;
+    bool peer_ghost_seen = false;
+    std::uint64_t ghost_recv_count = 0;
 
     std::int32_t last_sent_frame = -kKeyPackFrameNum;
 };
@@ -228,6 +233,16 @@ void handle_packet_locked(const Pack& packet, const sockaddr_in& from)
                 const std::int32_t f = newest - i;
                 if (f < 0) continue;
                 g_state.ctrl_bits_rcved[f] = packet.ctrl.keys[i];
+            }
+        } else if (packet.ctrl.ctrl_type == protocol::Ctrl_Ghost) {
+            g_state.peer_ghost_x = packet.ctrl.ghost_pos.pos_x;
+            g_state.peer_ghost_y = packet.ctrl.ghost_pos.pos_y;
+            g_state.peer_ghost_frame = packet.ctrl.frame;
+            g_state.peer_ghost_seen = true;
+            if ((++g_state.ghost_recv_count % 60ull) == 1ull) {
+                log_line("phase 6d.1: received ghost pos f=%d x=%.1f y=%.1f",
+                         packet.ctrl.frame, packet.ctrl.ghost_pos.pos_x,
+                         packet.ctrl.ghost_pos.pos_y);
             }
         }
         break;
@@ -493,6 +508,47 @@ void send_input_pack_if_due(std::uint64_t frame)
         p.ctrl.rng_seed[i] = 0;
     }
     send_pack_locked(p);
+}
+
+void send_ghost_pack(std::uint64_t frame, float pos_x, float pos_y)
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    if (!g_state.configured ||
+        g_state.connection != ConnectionState::Connected) {
+        return;
+    }
+    Pack p;
+    p.type = PACK_USUAL;
+    p.seq = g_state.next_seq++;
+    p.sendTick = now_ms();
+    p.echoTick = 0;
+    p.ctrl.ctrl_type = protocol::Ctrl_Ghost;
+    p.ctrl.frame = static_cast<std::int32_t>(frame);
+    p.ctrl.ghost_pos.pos_x = pos_x;
+    p.ctrl.ghost_pos.pos_y = pos_y;
+    for (int i = 0; i < kKeyPackFrameNum; ++i) {
+        p.ctrl.igc_type[i] = IGC_NONE;
+        p.ctrl.rng_seed[i] = 0;
+    }
+    send_pack_locked(p);
+
+    // Throttled send-side log confirms the local g_Player read is sane
+    // without turning every frame into log spam.
+    static std::uint64_t s_send_count = 0;
+    if ((++s_send_count % 60ull) == 1ull) {
+        log_line("phase 6d.1: sent ghost pos f=%llu x=%.1f y=%.1f",
+                 static_cast<unsigned long long>(frame), pos_x, pos_y);
+    }
+}
+
+bool peek_peer_ghost(float& out_x, float& out_y, std::uint64_t& out_frame)
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    if (!g_state.peer_ghost_seen) return false;
+    out_x = g_state.peer_ghost_x;
+    out_y = g_state.peer_ghost_y;
+    out_frame = static_cast<std::uint64_t>(g_state.peer_ghost_frame);
+    return true;
 }
 
 std::uint16_t peek_remote_input(std::uint64_t frame)

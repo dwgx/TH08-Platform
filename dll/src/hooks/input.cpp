@@ -46,6 +46,14 @@ int __fastcall hooked_GetInput()
     // is_configured() / is_connected() inside lockstep.
     th08_platform::net::capture_local_input(frame, cur);
     th08_platform::net::send_input_pack_if_due(frame);
+    // Phase 6d.1: stream local player position so the peer can render us
+    // as a ghost. g_Player is at a fixed image-base address; pos.x/y at
+    // +0x2B4/+0x2B8 are the live world coords (not the static spawn
+    // coords at +0x3D4/+0x3D8).
+    auto* gp = reinterpret_cast<const std::uint8_t*>(0x017D5EF8);
+    const float px = *reinterpret_cast<const float*>(gp + 0x2B4);
+    const float py = *reinterpret_cast<const float*>(gp + 0x2B8);
+    th08_platform::net::send_ghost_pack(frame, px, py);
 
     return ret;
 }
