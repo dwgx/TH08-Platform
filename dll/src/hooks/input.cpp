@@ -53,25 +53,35 @@ int __fastcall hooked_GetInput()
     auto* gp = reinterpret_cast<const std::uint8_t*>(0x017D5EF8);
     const float px = *reinterpret_cast<const float*>(gp + 0x2B4);
     const float py = *reinterpret_cast<const float*>(gp + 0x2B8);
-    // Phase 6e.2: also forward our lives count. AddLives @ 0x43C641
-    // writes float lives into *(GameManager+8 deref + 0x74). We read
-    // the same slot and truncate to u16 for transport. SEH-wrapped
-    // because the deref pointer is null pre-stage.
-    std::uint16_t lives = 0;
+    // Phase 6e.2/6e.3: forward stats via GameManager's stats sub-struct
+    // at *(GM+8). Offsets verified via mapping.csv + IDA decomp:
+    //   AddLives    @ 0x43C641 → +0x74 float
+    //   SetBombCount@ 0x406F30 → +0x80 float
+    //   SetPower    @ 0x406FA0 → +0x98 float
+    //   AddScore    @ 0x4181F0 → +0x08 i32 (score / 10 in ZUN's units)
+    // SEH-wrapped because the +8 deref is null pre-stage.
+    std::uint16_t lives = 0, bombs = 0, power = 0;
+    std::uint32_t score = 0;
     __try {
         auto* gm = reinterpret_cast<const std::uint8_t*>(0x0160F508);
-        auto* gm_globals = *reinterpret_cast<const std::uint8_t* const*>(gm + 8);
-        if (gm_globals) {
-            const float lives_f =
-                *reinterpret_cast<const float*>(gm_globals + 0x74);
-            if (lives_f >= 0.0f && lives_f < 65535.0f) {
-                lives = static_cast<std::uint16_t>(lives_f);
-            }
+        auto* stats = *reinterpret_cast<const std::uint8_t* const*>(gm + 8);
+        if (stats) {
+            const float l = *reinterpret_cast<const float*>(stats + 0x74);
+            const float b = *reinterpret_cast<const float*>(stats + 0x80);
+            const float p = *reinterpret_cast<const float*>(stats + 0x98);
+            const std::int32_t s = *reinterpret_cast<const std::int32_t*>(stats + 0x08);
+            // Tight clamps to suppress pre-stage noise. TH08 vanilla
+            // maxes are 9 lives, 9 bombs, 128 power; anything wider is
+            // garbage memory (stats struct allocated but un-init).
+            if (l >= 0.0f && l <  64.0f) lives = static_cast<std::uint16_t>(l);
+            if (b >= 0.0f && b <  64.0f) bombs = static_cast<std::uint16_t>(b);
+            if (p >= 0.0f && p < 256.0f) power = static_cast<std::uint16_t>(p);
+            if (s >= 0 && s < 0x40000000) score = static_cast<std::uint32_t>(s);
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        lives = 0;
+        // safe defaults already in scope
     }
-    th08_platform::net::send_ghost_pack(frame, px, py, lives);
+    th08_platform::net::send_ghost_pack(frame, px, py, lives, bombs, power, score);
 
     return ret;
 }

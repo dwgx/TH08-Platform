@@ -78,6 +78,9 @@ struct LockstepState {
     float peer_ghost_y = 0.0f;
     std::int32_t peer_ghost_frame = -1;
     std::uint16_t peer_ghost_lives = 0;
+    std::uint16_t peer_ghost_bombs = 0;
+    std::uint16_t peer_ghost_power = 0;
+    std::uint32_t peer_ghost_score = 0;
     bool peer_ghost_seen = false;
     std::uint64_t ghost_recv_count = 0;
 
@@ -240,13 +243,19 @@ void handle_packet_locked(const Pack& packet, const sockaddr_in& from)
             g_state.peer_ghost_y = packet.ctrl.ghost_pos.pos_y;
             g_state.peer_ghost_frame = packet.ctrl.frame;
             g_state.peer_ghost_lives = packet.ctrl.ghost_pos.lives;
+            g_state.peer_ghost_bombs = packet.ctrl.ghost_pos.bombs;
+            g_state.peer_ghost_power = packet.ctrl.ghost_pos.power;
+            g_state.peer_ghost_score = packet.ctrl.ghost_pos.score;
             g_state.peer_ghost_seen = true;
             if ((++g_state.ghost_recv_count % 60ull) == 1ull) {
-                log_line("phase 6d.1: received ghost pos f=%d x=%.1f y=%.1f lives=%u",
+                log_line("phase 6d.1: received ghost f=%d x=%.1f y=%.1f L=%u B=%u P=%u S=%u",
                          packet.ctrl.frame,
                          packet.ctrl.ghost_pos.pos_x,
                          packet.ctrl.ghost_pos.pos_y,
-                         static_cast<unsigned>(packet.ctrl.ghost_pos.lives));
+                         static_cast<unsigned>(packet.ctrl.ghost_pos.lives),
+                         static_cast<unsigned>(packet.ctrl.ghost_pos.bombs),
+                         static_cast<unsigned>(packet.ctrl.ghost_pos.power),
+                         static_cast<unsigned>(packet.ctrl.ghost_pos.score));
             }
         }
         break;
@@ -515,7 +524,8 @@ void send_input_pack_if_due(std::uint64_t frame)
 }
 
 void send_ghost_pack(std::uint64_t frame, float pos_x, float pos_y,
-                     std::uint16_t lives)
+                     std::uint16_t lives, std::uint16_t bombs,
+                     std::uint16_t power, std::uint32_t score)
 {
     std::lock_guard<std::mutex> lock(g_state.mutex);
     if (!g_state.configured ||
@@ -532,22 +542,24 @@ void send_ghost_pack(std::uint64_t frame, float pos_x, float pos_y,
     p.ctrl.ghost_pos.pos_x = pos_x;
     p.ctrl.ghost_pos.pos_y = pos_y;
     p.ctrl.ghost_pos.lives = lives;
-    p.ctrl.ghost_pos.bombs = 0;
-    p.ctrl.ghost_pos.power = 0;
+    p.ctrl.ghost_pos.bombs = bombs;
+    p.ctrl.ghost_pos.power = power;
     p.ctrl.ghost_pos.pad = 0;
+    p.ctrl.ghost_pos.score = score;
     for (int i = 0; i < kKeyPackFrameNum; ++i) {
         p.ctrl.igc_type[i] = IGC_NONE;
         p.ctrl.rng_seed[i] = 0;
     }
     send_pack_locked(p);
 
-    // Throttled send-side log confirms the local g_Player read is sane
+    // Throttled send-side log confirms the local stats reads are sane
     // without turning every frame into log spam.
     static std::uint64_t s_send_count = 0;
     if ((++s_send_count % 60ull) == 1ull) {
-        log_line("phase 6d.1: sent ghost pos f=%llu x=%.1f y=%.1f lives=%u",
+        log_line("phase 6d.1: sent ghost f=%llu x=%.1f y=%.1f L=%u B=%u P=%u S=%u",
                  static_cast<unsigned long long>(frame), pos_x, pos_y,
-                 static_cast<unsigned>(lives));
+                 static_cast<unsigned>(lives), static_cast<unsigned>(bombs),
+                 static_cast<unsigned>(power), static_cast<unsigned>(score));
     }
 }
 
@@ -565,6 +577,24 @@ std::uint16_t peer_ghost_lives()
 {
     std::lock_guard<std::mutex> lock(g_state.mutex);
     return g_state.peer_ghost_lives;
+}
+
+std::uint16_t peer_ghost_bombs()
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    return g_state.peer_ghost_bombs;
+}
+
+std::uint16_t peer_ghost_power()
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    return g_state.peer_ghost_power;
+}
+
+std::uint32_t peer_ghost_score()
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    return g_state.peer_ghost_score;
 }
 
 std::uint16_t peek_remote_input(std::uint64_t frame)

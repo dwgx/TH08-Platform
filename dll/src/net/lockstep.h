@@ -36,9 +36,13 @@ std::uint64_t last_rtt_ms();
 bool has_shared_seed();
 std::uint32_t shared_seed();
 void send_ghost_pack(std::uint64_t frame, float pos_x, float pos_y,
-                     std::uint16_t lives);
+                     std::uint16_t lives, std::uint16_t bombs,
+                     std::uint16_t power, std::uint32_t score);
 bool peek_peer_ghost(float& out_x, float& out_y, std::uint64_t& out_frame);
 std::uint16_t peer_ghost_lives();
+std::uint16_t peer_ghost_bombs();
+std::uint16_t peer_ghost_power();
+std::uint32_t peer_ghost_score();
 
 // Phase 4 legacy entry points. Under the new Pack wire format these
 // degrade to no-ops / sensible defaults; rollback.cpp keeps building

@@ -72,14 +72,19 @@ void enqueue_peer_label()
         // stage gameplay (hooked_OnUpdate is the GameManager update,
         // doesn't tick at title — defer always-on display to a future
         // higher-level update hook).
-        char status[80];
+        char status[96];
         const bool connected = th08_platform::net::is_connected();
         const auto rtt = th08_platform::net::last_rtt_ms();
-        const auto p2_lives = th08_platform::net::peer_ghost_lives();
-        std::snprintf(status, sizeof(status), "NET %s rtt=%llums P2*%u",
+        const auto pl = th08_platform::net::peer_ghost_lives();
+        const auto pb = th08_platform::net::peer_ghost_bombs();
+        const auto pp = th08_platform::net::peer_ghost_power();
+        const auto ps = th08_platform::net::peer_ghost_score();
+        std::snprintf(status, sizeof(status),
+                      "NET %s %llums  P2 L%u B%u Pw%u S%u",
                       connected ? "OK" : "..",
                       static_cast<unsigned long long>(rtt),
-                      static_cast<unsigned>(p2_lives));
+                      static_cast<unsigned>(pl), static_cast<unsigned>(pb),
+                      static_cast<unsigned>(pp), static_cast<unsigned>(ps));
         Vec3 status_pos = { 424.0f, 10.0f, 0.0f };
         g_AddString(ascii, nullptr, &status_pos.x, status);
 

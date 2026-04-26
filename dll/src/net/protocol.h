@@ -77,13 +77,14 @@ struct CtrlPack {
         struct { std::int32_t delay; std::int32_t ver; } init_setting;
         struct { std::int32_t frame_to_re_sync; } resync_setting;
         struct {
-            float pos_x;
-            float pos_y;
-            std::uint16_t lives;     // +8: GM->globals[0x74] truncated to integer
-            std::uint16_t bombs;     // +10: reserved (6e.3)
-            std::uint16_t power;     // +12: reserved (6e.3)
-            std::uint16_t pad;       // +14: alignment, reserved
-        } ghost_pos;                 // total 16 bytes; well under union 30B max
+            float pos_x;             // +0:  Player.pos.x (g_Player+0x2B4)
+            float pos_y;             // +4:  Player.pos.y (g_Player+0x2B8)
+            std::uint16_t lives;     // +8:  GM->stats[0x74], truncated float
+            std::uint16_t bombs;     // +10: GM->stats[0x80], truncated float
+            std::uint16_t power;     // +12: GM->stats[0x98], truncated float
+            std::uint16_t pad;       // +14: alignment
+            std::uint32_t score;     // +16: GM->stats[0x08], score / 10 in ZUN's units
+        } ghost_pos;                 // total 20 bytes; well under union 30B max
     };
     InGameCtrlType igc_type[kKeyPackFrameNum];
     std::uint16_t rng_seed[kKeyPackFrameNum];
