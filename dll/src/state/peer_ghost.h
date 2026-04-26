@@ -20,4 +20,10 @@ void enqueue_peer_label();
 // trampoline) does not.
 void enqueue_status_strip();
 
+// Phase 6f.2: rendered every frame while the OnUpdate gate is held
+// (peer connected but hasn't sent Ctrl_Start_Game, or not connected
+// yet in co-op mode). Centered playfield message tells the local
+// user what the other side hasn't done.
+void enqueue_waiting_overlay();
+
 }  // namespace th08_platform::state::peer_ghost

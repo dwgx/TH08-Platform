@@ -33,14 +33,30 @@ std::atomic<uint64_t> g_frame_count{0};
 
 int __fastcall hooked_OnUpdate(void* gm)
 {
+    // Phase 6f.2 (partial — visual only): announce stage entry on first
+    // hooked OnUpdate tick, and paint a "WAITING FOR P1/P2..." overlay
+    // while the peer hasn't reported in (or hasn't connected). True
+    // OnUpdate freezing was attempted but skipping the original chain
+    // callback corrupts state and crashes the game in ~2s — the freeze
+    // hook needs to land at the music-select -> stage transition or via
+    // GameManager::isInGameMenu (an IDA-driven RE task; punted for the
+    // codex side). For now the game runs solo on whichever side enters
+    // first; the overlay tells the user what's missing.
+    static std::atomic<bool> s_start_announced{false};
+    if (th08_platform::net::is_configured() &&
+        !s_start_announced.exchange(true, std::memory_order_acq_rel)) {
+        th08_platform::net::send_start_game(1);
+    }
+    if (th08_platform::net::is_configured() &&
+        (!th08_platform::net::is_connected() ||
+         th08_platform::net::peer_start_game_frame() < 0)) {
+        th08_platform::state::peer_ghost::enqueue_waiting_overlay();
+    }
+
     const auto f = g_frame_count.fetch_add(1, std::memory_order_relaxed) + 1;
     // Seed before the stage script's first RNG read in the original update.
     if (f == 1) {
         th08_platform::state::rng_sync::apply_if_ready();
-        // Phase 6f: announce stage entry to peer. Both peers send;
-        // each side stamps the other's start_game packet against
-        // its own local frame in lockstep state for skew analysis.
-        th08_platform::net::send_start_game(f);
     }
     th08_platform::net::rollback::on_frame_start(f);
     th08_platform::state::on_frame_tick(static_cast<unsigned long long>(f));

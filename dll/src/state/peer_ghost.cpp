@@ -110,6 +110,31 @@ void enqueue_status_strip()
     }
 }
 
+void enqueue_waiting_overlay()
+{
+    if (!g_enabled || !g_AddString) return;
+
+    void* const ascii = reinterpret_cast<void*>(globals::kAddr_g_AsciiManager);
+    struct Vec3 { float x, y, z; };
+
+    __try {
+        // Centered in the 384x448 playfield (origin 32,16 -> screen-coords
+        // center = (224, 240)). Leave room left of center for the message
+        // body so it visually centers.
+        const char* line1 = th08_platform::net::is_host()
+            ? "WAITING FOR P2..."
+            : "WAITING FOR P1...";
+        const char* line2 = "PRESS ESC TO QUIT";
+        Vec3 line1_pos = { 132.0f, 218.0f, 0.0f };
+        Vec3 line2_pos = { 138.0f, 244.0f, 0.0f };
+        g_AddString(ascii, nullptr, &line1_pos.x, line1);
+        g_AddString(ascii, nullptr, &line2_pos.x, line2);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        log_line("peer_ghost: SEH during waiting overlay AddString; disabling");
+        g_enabled = false;
+    }
+}
+
 void enqueue_peer_label()
 {
     if (!g_enabled || !g_AddString) return;
