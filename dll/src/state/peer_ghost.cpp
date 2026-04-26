@@ -66,17 +66,27 @@ void enqueue_status_strip()
     struct Vec3 { float x, y, z; };
 
     __try {
-        char status[96];
+        char status[128];
         const bool connected = th08_platform::net::is_connected();
         const auto rtt = th08_platform::net::last_rtt_ms();
         const auto pl = th08_platform::net::peer_ghost_lives();
         const auto pb = th08_platform::net::peer_ghost_bombs();
         const auto pp = th08_platform::net::peer_ghost_power();
         const auto ps = th08_platform::net::peer_ghost_score();
+        // Phase 6f: peer's game phase. ghost packet's frame == 0 means
+        // peer is still at title screen; > 0 means in stage at that frame.
+        float gx = 0.0f, gy = 0.0f;
+        std::uint64_t pf = 0;
+        const bool got_ghost = th08_platform::net::peek_peer_ghost(gx, gy, pf);
+        const char* phase = !got_ghost ? "WAIT"
+                          : (pf == 0)  ? "TITLE"
+                          :              "STAGE";
         std::snprintf(status, sizeof(status),
-                      "NET %s %llums  P2 L%u B%u Pw%u S%u",
+                      "NET %s %llums  P2 %s f=%llu L%u B%u Pw%u S%u",
                       connected ? "OK" : "..",
                       static_cast<unsigned long long>(rtt),
+                      phase,
+                      static_cast<unsigned long long>(pf),
                       static_cast<unsigned>(pl), static_cast<unsigned>(pb),
                       static_cast<unsigned>(pp), static_cast<unsigned>(ps));
         Vec3 status_pos = { 424.0f, 10.0f, 0.0f };

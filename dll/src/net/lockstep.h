@@ -44,6 +44,13 @@ std::uint16_t peer_ghost_bombs();
 std::uint16_t peer_ghost_power();
 std::uint32_t peer_ghost_score();
 
+// Phase 6f: host calls send_start_game(local_frame) at its first
+// post-stage-entry OnUpdate tick. Peer receives and stamps it
+// against its own local frame; getter exposes the host's frame at
+// send time (or -1 if never received).
+void send_start_game(std::uint64_t local_frame);
+std::int64_t peer_start_game_frame();
+
 // Phase 4 legacy entry points. Under the new Pack wire format these
 // degrade to no-ops / sensible defaults; rollback.cpp keeps building
 // but actual remote-frame plumbing now goes through capture_local_input

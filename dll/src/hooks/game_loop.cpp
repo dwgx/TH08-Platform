@@ -1,5 +1,6 @@
 #include "game_loop.h"
 #include "../logging.h"
+#include "../net/lockstep.h"
 #include "../net/rollback.h"
 #include "../state/hud.h"
 #include "../state/peer_ghost.h"
@@ -36,6 +37,10 @@ int __fastcall hooked_OnUpdate(void* gm)
     // Seed before the stage script's first RNG read in the original update.
     if (f == 1) {
         th08_platform::state::rng_sync::apply_if_ready();
+        // Phase 6f: announce stage entry to peer. Both peers send;
+        // each side stamps the other's start_game packet against
+        // its own local frame in lockstep state for skew analysis.
+        th08_platform::net::send_start_game(f);
     }
     th08_platform::net::rollback::on_frame_start(f);
     th08_platform::state::on_frame_tick(static_cast<unsigned long long>(f));

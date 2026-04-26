@@ -83,6 +83,7 @@ struct LockstepState {
     std::uint32_t peer_ghost_score = 0;
     bool peer_ghost_seen = false;
     std::uint64_t ghost_recv_count = 0;
+    std::int64_t peer_start_frame = -1;  // 6f: host's frame at start_game send
 
     std::int32_t last_sent_frame = -kKeyPackFrameNum;
 };
@@ -231,7 +232,13 @@ void handle_packet_locked(const Pack& packet, const sockaddr_in& from)
         break;
     }
     case PACK_USUAL: {
-        if (packet.ctrl.ctrl_type == protocol::Ctrl_Key) {
+        if (packet.ctrl.ctrl_type == protocol::Ctrl_Start_Game) {
+            if (g_state.peer_start_frame < 0) {
+                g_state.peer_start_frame = static_cast<std::int64_t>(packet.ctrl.frame);
+                log_line("phase 6f: received start_game from host at host_f=%d",
+                         packet.ctrl.frame);
+            }
+        } else if (packet.ctrl.ctrl_type == protocol::Ctrl_Key) {
             const std::int32_t newest = packet.ctrl.frame;
             for (int i = 0; i < kKeyPackFrameNum; ++i) {
                 const std::int32_t f = newest - i;
@@ -595,6 +602,35 @@ std::uint32_t peer_ghost_score()
 {
     std::lock_guard<std::mutex> lock(g_state.mutex);
     return g_state.peer_ghost_score;
+}
+
+void send_start_game(std::uint64_t local_frame)
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    if (!g_state.configured ||
+        g_state.connection != ConnectionState::Connected) {
+        return;
+    }
+    Pack p;
+    p.type = PACK_USUAL;
+    p.seq = g_state.next_seq++;
+    p.sendTick = now_ms();
+    p.echoTick = 0;
+    p.ctrl.ctrl_type = protocol::Ctrl_Start_Game;
+    p.ctrl.frame = static_cast<std::int32_t>(local_frame);
+    for (int i = 0; i < kKeyPackFrameNum; ++i) {
+        p.ctrl.igc_type[i] = IGC_NONE;
+        p.ctrl.rng_seed[i] = 0;
+    }
+    send_pack_locked(p);
+    log_line("phase 6f: sent start_game at local_f=%llu",
+             static_cast<unsigned long long>(local_frame));
+}
+
+std::int64_t peer_start_game_frame()
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    return g_state.peer_start_frame;
 }
 
 std::uint16_t peek_remote_input(std::uint64_t frame)
