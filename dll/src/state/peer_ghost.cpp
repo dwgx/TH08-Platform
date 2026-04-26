@@ -68,15 +68,18 @@ void enqueue_peer_label()
     // Calls into ZUN code with our crafted args. SEH so a bad queue
     // state doesn't crash the game on every frame.
     __try {
-        // Phase 6e.1: top-strip connection status line. Always visible
-        // (even at title screen) so user knows net is alive and what
-        // the latency looks like before entering a stage.
-        char status[64];
+        // Phase 6e.1: top-strip connection status + RTT. Visible during
+        // stage gameplay (hooked_OnUpdate is the GameManager update,
+        // doesn't tick at title — defer always-on display to a future
+        // higher-level update hook).
+        char status[80];
         const bool connected = th08_platform::net::is_connected();
         const auto rtt = th08_platform::net::last_rtt_ms();
-        std::snprintf(status, sizeof(status), "NET %s rtt=%llums",
+        const auto p2_lives = th08_platform::net::peer_ghost_lives();
+        std::snprintf(status, sizeof(status), "NET %s rtt=%llums P2*%u",
                       connected ? "OK" : "..",
-                      static_cast<unsigned long long>(rtt));
+                      static_cast<unsigned long long>(rtt),
+                      static_cast<unsigned>(p2_lives));
         Vec3 status_pos = { 424.0f, 10.0f, 0.0f };
         g_AddString(ascii, nullptr, &status_pos.x, status);
 

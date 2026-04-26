@@ -53,7 +53,25 @@ int __fastcall hooked_GetInput()
     auto* gp = reinterpret_cast<const std::uint8_t*>(0x017D5EF8);
     const float px = *reinterpret_cast<const float*>(gp + 0x2B4);
     const float py = *reinterpret_cast<const float*>(gp + 0x2B8);
-    th08_platform::net::send_ghost_pack(frame, px, py);
+    // Phase 6e.2: also forward our lives count. AddLives @ 0x43C641
+    // writes float lives into *(GameManager+8 deref + 0x74). We read
+    // the same slot and truncate to u16 for transport. SEH-wrapped
+    // because the deref pointer is null pre-stage.
+    std::uint16_t lives = 0;
+    __try {
+        auto* gm = reinterpret_cast<const std::uint8_t*>(0x0160F508);
+        auto* gm_globals = *reinterpret_cast<const std::uint8_t* const*>(gm + 8);
+        if (gm_globals) {
+            const float lives_f =
+                *reinterpret_cast<const float*>(gm_globals + 0x74);
+            if (lives_f >= 0.0f && lives_f < 65535.0f) {
+                lives = static_cast<std::uint16_t>(lives_f);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        lives = 0;
+    }
+    th08_platform::net::send_ghost_pack(frame, px, py, lives);
 
     return ret;
 }
