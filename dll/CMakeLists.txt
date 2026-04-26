@@ -57,6 +57,7 @@ add_library(th08_platform SHARED
     src/state/p2_lives.cpp
     src/state/hud.cpp
     src/state/p2_mirror.cpp
+    src/state/rng_sync.cpp
 )
 target_include_directories(th08_platform PRIVATE
     src

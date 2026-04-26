@@ -33,6 +33,8 @@ void capture_local_input(std::uint64_t frame, std::uint16_t input);
 void send_input_pack_if_due(std::uint64_t frame);
 std::uint16_t peek_remote_input(std::uint64_t frame);
 std::uint64_t last_rtt_ms();
+bool has_shared_seed();
+std::uint32_t shared_seed();
 
 // Phase 4 legacy entry points. Under the new Pack wire format these
 // degrade to no-ops / sensible defaults; rollback.cpp keeps building

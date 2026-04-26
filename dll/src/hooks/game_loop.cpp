@@ -1,8 +1,9 @@
 #include "game_loop.h"
 #include "../logging.h"
 #include "../net/rollback.h"
-#include "../state/player2_hook.h"
 #include "../state/hud.h"
+#include "../state/player2_hook.h"
+#include "../state/rng_sync.h"
 
 #include <windows.h>
 #include <MinHook.h>
@@ -31,6 +32,10 @@ std::atomic<uint64_t> g_frame_count{0};
 int __fastcall hooked_OnUpdate(void* gm)
 {
     const auto f = g_frame_count.fetch_add(1, std::memory_order_relaxed) + 1;
+    // Seed before the stage script's first RNG read in the original update.
+    if (f == 1) {
+        th08_platform::state::rng_sync::apply_if_ready();
+    }
     th08_platform::net::rollback::on_frame_start(f);
     th08_platform::state::on_frame_tick(static_cast<unsigned long long>(f));
     // Phase 5g: queue P2 stats into AsciiManager BEFORE original

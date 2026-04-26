@@ -70,6 +70,10 @@ struct LockstepState {
     ULONGLONG last_periodic_ping_tick = 0;
     ULONGLONG last_receive_tick = 0;
     std::uint64_t last_rtt_ms = 0;
+    std::uint32_t host_seed = 0;
+    bool host_seed_generated = false;
+    std::uint32_t peer_received_seed = 0;
+    bool peer_seed_received = false;
 
     std::int32_t last_sent_frame = -kKeyPackFrameNum;
 };
@@ -160,7 +164,13 @@ void send_ping_locked(Control ctrl_type = protocol::Ctrl_No_Ctrl)
     p.seq = g_state.next_seq++;
     p.sendTick = now_ms();
     p.echoTick = 0;
-    p.ctrl.ctrl_type = ctrl_type;
+    if (g_state.is_host && g_state.host_seed_generated) {
+        p.ctrl.ctrl_type = protocol::Ctrl_Set_InitSetting;
+        p.ctrl.init_setting.delay = static_cast<std::int32_t>(g_state.host_seed);
+        p.ctrl.init_setting.ver = static_cast<std::int32_t>(kMultiNetVer);
+    } else {
+        p.ctrl.ctrl_type = ctrl_type;
+    }
     p.ctrl.frame = 0;
     p.ctrl.init_setting.ver = static_cast<std::int32_t>(kMultiNetVer);
     send_pack_locked(p);
@@ -194,6 +204,15 @@ void handle_packet_locked(const Pack& packet, const sockaddr_in& from)
         reply.ctrl.init_setting.ver = static_cast<std::int32_t>(kMultiNetVer);
         send_pack_locked(reply);
         mark_connected_locked();
+        if (packet.ctrl.ctrl_type == protocol::Ctrl_Set_InitSetting) {
+            if (!g_state.peer_seed_received) {
+                g_state.peer_received_seed =
+                    static_cast<std::uint32_t>(packet.ctrl.init_setting.delay);
+                g_state.peer_seed_received = true;
+                log_line("phase 6c: received shared seed = 0x%08x",
+                         g_state.peer_received_seed);
+            }
+        }
         break;
     }
     case PACK_PONG: {
@@ -298,6 +317,10 @@ bool initialize_socket_locked(std::uint16_t listen_port)
     g_state.last_periodic_ping_tick = 0;
     g_state.last_receive_tick = 0;
     g_state.last_rtt_ms = 0;
+    g_state.host_seed = 0;
+    g_state.host_seed_generated = false;
+    g_state.peer_received_seed = 0;
+    g_state.peer_seed_received = false;
     g_state.last_sent_frame = -kKeyPackFrameNum;
     return true;
 }
@@ -347,6 +370,22 @@ bool initialize_listen_only(std::uint16_t listen_port)
     g_state.is_host = true;
     g_state.peer_addr = {};
     g_state.peer_label.clear();
+    if (!g_state.host_seed_generated) {
+        char env[32] = {};
+        const DWORD env_len =
+            ::GetEnvironmentVariableA("TH08_PLATFORM_SEED", env, sizeof(env));
+        std::uint32_t seed;
+        if (env_len > 0) {
+            char* end = nullptr;
+            seed = std::strtoul(env, &end, 0);
+        } else {
+            seed = static_cast<std::uint32_t>(
+                ::GetTickCount64() ^ ::GetCurrentProcessId());
+        }
+        g_state.host_seed = seed;
+        g_state.host_seed_generated = true;
+        log_line("phase 6c: generated host seed = 0x%08x", seed);
+    }
     return true;
 }
 
@@ -366,6 +405,10 @@ void shutdown()
     g_state.last_periodic_ping_tick = 0;
     g_state.last_receive_tick = 0;
     g_state.last_rtt_ms = 0;
+    g_state.host_seed = 0;
+    g_state.host_seed_generated = false;
+    g_state.peer_received_seed = 0;
+    g_state.peer_seed_received = false;
     fake_rtt::shutdown();
     if (g_state.wsa_ready) {
         ::WSACleanup();
@@ -468,6 +511,18 @@ std::uint64_t last_rtt_ms()
 {
     std::lock_guard<std::mutex> lock(g_state.mutex);
     return g_state.last_rtt_ms;
+}
+
+bool has_shared_seed()
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    return g_state.is_host ? g_state.host_seed_generated : g_state.peer_seed_received;
+}
+
+std::uint32_t shared_seed()
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    return g_state.is_host ? g_state.host_seed : g_state.peer_received_seed;
 }
 
 void send_local_input(std::uint64_t /*frame*/, std::uint16_t /*input*/,
