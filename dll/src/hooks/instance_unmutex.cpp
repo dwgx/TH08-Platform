@@ -3,62 +3,68 @@
 #include <windows.h>
 
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
 
 namespace th08_platform::hooks {
 
 namespace {
 
-// th08.exe v1.00d IAT entry for KERNEL32!CreateMutexA, located via IDA
-// (sub_443420 @ 0x443420 calls [0x4b4098] = imp_CreateMutexA).
-constexpr std::uintptr_t kCreateMutexAIatAddr = 0x4b4098;
+// th08.exe v1.00d, in sub_443420 @ 0x443420:
+//   0x44344A  83 F8 B7        cmp eax, 0B7h
+//   0x44344F  75 1A           jnz short loc_44346B
+//   0x443451  68 C8 64 4B 00  push offset "二つは起動できません..."
+//
+// We change the byte at 0x44344F from 0x75 (JNZ short) to 0xEB (JMP short).
+// Both opcodes are 2-byte short branches with the same encoding for the
+// 8-bit displacement, so the operand 0x1A continues to mean "skip 0x1A
+// bytes forward to loc_44346B" — the success path.
+constexpr std::uintptr_t kJnzAddr = 0x44344F;
+constexpr std::uint8_t kJnzOpcode = 0x75;
+constexpr std::uint8_t kJmpOpcode = 0xEB;
 
-// String constant ZUN passes as lpName. Hardcoded in th08.exe; matched
-// exactly so we don't disturb any other (future) named-mutex callers.
-constexpr const char* kZunMutexName = "Touhou 08 App";
-
-using CreateMutexA_t = HANDLE(WINAPI*)(LPSECURITY_ATTRIBUTES, BOOL, LPCSTR);
-
-CreateMutexA_t g_real_CreateMutexA = nullptr;
 bool g_patch_applied = false;
-
-HANDLE WINAPI hook_CreateMutexA(LPSECURITY_ATTRIBUTES attrs, BOOL initial,
-                                LPCSTR name)
-{
-    if (name && std::strcmp(name, kZunMutexName) == 0) {
-        char unique[64] = {};
-        std::snprintf(unique, sizeof(unique),
-                      "th08_platform_inst_%lu",
-                      static_cast<unsigned long>(::GetCurrentProcessId()));
-        return g_real_CreateMutexA(attrs, initial, unique);
-    }
-    return g_real_CreateMutexA(attrs, initial, name);
-}
 
 }  // namespace
 
-bool patch_create_mutex_iat()
+bool patch_zun_single_instance_check()
 {
-    auto* iat_slot = reinterpret_cast<CreateMutexA_t*>(kCreateMutexAIatAddr);
+    auto* target = reinterpret_cast<std::uint8_t*>(kJnzAddr);
 
     DWORD old_protect = 0;
-    if (!::VirtualProtect(iat_slot, sizeof(*iat_slot),
-                          PAGE_READWRITE, &old_protect)) {
+    if (!::VirtualProtect(target, 1, PAGE_EXECUTE_READWRITE, &old_protect)) {
         return false;
     }
 
-    g_real_CreateMutexA = *iat_slot;
-    *iat_slot = &hook_CreateMutexA;
+    const std::uint8_t found = *target;
+    if (found == kJmpOpcode) {
+        // Already patched (idempotent — should never happen since DLL
+        // is loaded once per process, but guard anyway).
+        DWORD restore = 0;
+        ::VirtualProtect(target, 1, old_protect, &restore);
+        g_patch_applied = true;
+        return true;
+    }
+    if (found != kJnzOpcode) {
+        // Unexpected byte — bail without writing to avoid corrupting
+        // an unrelated th08 build / version.
+        DWORD restore = 0;
+        ::VirtualProtect(target, 1, old_protect, &restore);
+        return false;
+    }
+
+    *target = kJmpOpcode;
+
+    // Flush instruction cache so the CPU sees the patched byte. Required
+    // on x86 for code self-modification correctness.
+    ::FlushInstructionCache(::GetCurrentProcess(), target, 1);
 
     DWORD restore = 0;
-    ::VirtualProtect(iat_slot, sizeof(*iat_slot), old_protect, &restore);
+    ::VirtualProtect(target, 1, old_protect, &restore);
 
-    g_patch_applied = (g_real_CreateMutexA != nullptr);
-    return g_patch_applied;
+    g_patch_applied = true;
+    return true;
 }
 
-bool was_create_mutex_iat_patched()
+bool was_zun_single_instance_check_patched()
 {
     return g_patch_applied;
 }

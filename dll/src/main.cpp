@@ -82,8 +82,8 @@ DWORD WINAPI dll_init_thread(LPVOID)
 {
     th08_platform::log_init();
     th08_platform::log_line("th08_platform.dll attached; starting hooks");
-    th08_platform::log_line("phase 6a: CreateMutexA IAT patch %s",
-                            th08_platform::hooks::was_create_mutex_iat_patched()
+    th08_platform::log_line("phase 6a: ZUN single-instance check patch %s",
+                            th08_platform::hooks::was_zun_single_instance_check_patched()
                                 ? "applied" : "FAILED");
     th08_platform::net::set_fake_rtt_ms(read_fake_rtt_ms());
     th08_platform::net::rollback::reset();
@@ -242,9 +242,9 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID /*reserved*/)
     case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls(hinst);
         // Phase 6a: must run BEFORE main thread resumes so th08's
-        // sub_443420 sees the patched IAT. The patch is a single
-        // VirtualProtect + pointer write — safe in DllMain.
-        th08_platform::hooks::patch_create_mutex_iat();
+        // sub_443420 takes the patched (always-success) branch. The
+        // patch is one byte + VirtualProtect — safe in DllMain.
+        th08_platform::hooks::patch_zun_single_instance_check();
         // Avoid other non-trivial work in DllMain itself (loader lock).
         CreateThread(nullptr, 0, dll_init_thread, nullptr, 0, nullptr);
         break;
