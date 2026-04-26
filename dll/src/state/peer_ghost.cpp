@@ -62,22 +62,32 @@ void enqueue_peer_label()
 {
     if (!g_enabled || !g_AddString) return;
 
-    float wx = 0.0f, wy = 0.0f;
-    std::uint64_t frame = 0;
-    if (!th08_platform::net::peek_peer_ghost(wx, wy, frame)) return;
-
-    // Skip pre-stage zero-pos so we don't draw "P2" pinned at (32,16)
-    // before the peer enters a stage.
-    if (wx == 0.0f && wy == 0.0f) return;
-
     void* const ascii = reinterpret_cast<void*>(globals::kAddr_g_AsciiManager);
+    struct Vec3 { float x, y, z; };
 
     // Calls into ZUN code with our crafted args. SEH so a bad queue
     // state doesn't crash the game on every frame.
     __try {
-        struct Vec3 { float x, y, z; };
-        Vec3 pos = { kPlayfieldOriginX + wx, kPlayfieldOriginY + wy, 0.0f };
-        g_AddString(ascii, nullptr, &pos.x, "P2");
+        // Phase 6e.1: top-strip connection status line. Always visible
+        // (even at title screen) so user knows net is alive and what
+        // the latency looks like before entering a stage.
+        char status[64];
+        const bool connected = th08_platform::net::is_connected();
+        const auto rtt = th08_platform::net::last_rtt_ms();
+        std::snprintf(status, sizeof(status), "NET %s rtt=%llums",
+                      connected ? "OK" : "..",
+                      static_cast<unsigned long long>(rtt));
+        Vec3 status_pos = { 424.0f, 10.0f, 0.0f };
+        g_AddString(ascii, nullptr, &status_pos.x, status);
+
+        // Phase 6d.2: P2 label at peer's world position.
+        float wx = 0.0f, wy = 0.0f;
+        std::uint64_t frame = 0;
+        if (!th08_platform::net::peek_peer_ghost(wx, wy, frame)) return;
+        if (wx == 0.0f && wy == 0.0f) return;  // pre-stage, skip
+
+        Vec3 ghost_pos = { kPlayfieldOriginX + wx, kPlayfieldOriginY + wy, 0.0f };
+        g_AddString(ascii, nullptr, &ghost_pos.x, "P2");
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         log_line("peer_ghost: SEH during AddString; disabling for safety");
         g_enabled = false;
