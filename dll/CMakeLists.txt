@@ -43,6 +43,7 @@ add_library(th08_platform SHARED
     src/hooks/instance_unmutex.cpp
     src/net/udp_socket.cpp
     src/net/lockstep.cpp
+    src/net/pump_thread.cpp
     src/net/fake_rtt.cpp
     src/net/rollback.cpp
     src/state/frame_state.cpp

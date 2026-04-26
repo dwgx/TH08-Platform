@@ -1,6 +1,7 @@
 #include "input.h"
 
 #include "../logging.h"
+#include "../net/lockstep.h"
 #include "../state/globals.h"
 #include "game_loop.h"
 
@@ -37,6 +38,14 @@ int __fastcall hooked_GetInput()
         th08_platform::log_line("input: cur=0x%04x (held=%u)", cur, held);
         g_last_logged_input = cur;
     }
+
+    // Phase 6b: feed local input into the lockstep state machine, and
+    // every kKeyPackFrameNum frames flush a Pack to the peer. `frame`
+    // only ticks once GameManager::OnUpdate is firing (i.e., post-stage-
+    // select); on title-screen these calls early-out via
+    // is_configured() / is_connected() inside lockstep.
+    th08_platform::net::capture_local_input(frame, cur);
+    th08_platform::net::send_input_pack_if_due(frame);
 
     return ret;
 }

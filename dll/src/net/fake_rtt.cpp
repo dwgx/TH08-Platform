@@ -16,7 +16,9 @@ struct QueuedPacket {
     ULONGLONG deadline = 0;
     sockaddr_in addr{};
     int size = 0;
-    std::array<std::uint8_t, 64> bytes{};
+    // Sized to fit Phase 6b Pack (~152B) plus headroom; matches
+    // UdpDatagram::bytes capacity.
+    std::array<std::uint8_t, 512> bytes{};
 };
 
 std::uint32_t g_delay_ms = 0;

@@ -11,7 +11,10 @@ namespace th08_platform::net {
 struct UdpDatagram {
     sockaddr_in from{};
     int size = 0;
-    std::array<std::uint8_t, 64> bytes{};
+    // Sized to hold the Phase 6b Pack (~152 bytes) plus headroom for
+    // future protocol additions. Datagrams larger than this are dropped
+    // by the OS recv path.
+    std::array<std::uint8_t, 512> bytes{};
 };
 
 class UdpSocket {
