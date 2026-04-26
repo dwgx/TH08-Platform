@@ -2,9 +2,10 @@
 //
 // Launches th08.exe and injects th08_platform.dll via the classic
 // CreateRemoteThread + LoadLibraryA pattern. The loader is deliberately
-// minimal — everything interesting lives inside the DLL.
+// minimal - everything interesting lives inside the DLL.
 //
-// Usage: th08_platform_loader.exe <path_to_th08.exe> [--peer <ip:port>]
+// Usage: th08_platform_loader.exe <path_to_th08.exe>
+//        [--listen <port>] [--peer <ip:port>] [--host]
 
 #include <windows.h>
 #include <psapi.h>
@@ -25,6 +26,11 @@ std::string resolve_dll_path()
     std::filesystem::path p(self);
     p.replace_filename("th08_platform.dll");
     return p.string();
+}
+
+bool is_flag(const char* value)
+{
+    return value && value[0] == '-' && value[1] == '-';
 }
 
 bool inject_dll(HANDLE proc, const std::string& dll_path)
@@ -62,7 +68,7 @@ bool inject_dll(HANDLE proc, const std::string& dll_path)
     VirtualFreeEx(proc, remote, 0, MEM_RELEASE);
 
     if (exit_code == 0) {
-        std::fprintf(stderr, "LoadLibraryA returned 0 — DLL failed to load\n");
+        std::fprintf(stderr, "LoadLibraryA returned 0 - DLL failed to load\n");
         return false;
     }
     std::printf("LoadLibraryA returned module handle 0x%lx\n", exit_code);
@@ -72,7 +78,18 @@ bool inject_dll(HANDLE proc, const std::string& dll_path)
 int usage()
 {
     std::fprintf(stderr,
-        "usage: th08_platform_loader.exe <path_to_th08.exe> [--peer ip:port]\n");
+        "usage: th08_platform_loader.exe <path_to_th08.exe> [--listen <port>] [--peer <ip:port>] [--host]\n"
+        "\n"
+        "options:\n"
+        "  --listen <port>    set TH08_PLATFORM_LISTEN to <port>\n"
+        "  --peer <ip:port>   set TH08_PLATFORM_PEER to <ip:port>\n"
+        "  --host             set TH08_PLATFORM_HOST=1 and default listen port 7480\n"
+        "                     unless --listen is also given\n"
+        "\n"
+        "examples:\n"
+        "  th08_platform_loader.exe C:\\games\\th08\\th08.exe --host\n"
+        "  th08_platform_loader.exe C:\\games\\th08\\th08.exe --host --listen 7481\n"
+        "  th08_platform_loader.exe C:\\games\\th08\\th08.exe --peer 127.0.0.1:7480\n");
     return 2;
 }
 
@@ -84,6 +101,9 @@ int main(int argc, char** argv)
 
     const std::string target = argv[1];
     const std::string dll = resolve_dll_path();
+    const char* listen_value = nullptr;
+    const char* peer_value = nullptr;
+    bool host_mode = false;
 
     if (!std::filesystem::exists(target)) {
         std::fprintf(stderr, "target not found: %s\n", target.c_str());
@@ -95,12 +115,30 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // Optional --peer is stashed in an env var the DLL will pick up in Phase 3+.
-    for (int i = 2; i + 1 < argc; ++i) {
+    for (int i = 2; i < argc; ++i) {
         if (std::strcmp(argv[i], "--peer") == 0) {
-            SetEnvironmentVariableA("TH08_PLATFORM_PEER", argv[i + 1]);
-            ++i;
+            if (i + 1 >= argc || is_flag(argv[i + 1])) return usage();
+            peer_value = argv[++i];
+        } else if (std::strcmp(argv[i], "--listen") == 0) {
+            if (i + 1 >= argc || is_flag(argv[i + 1])) return usage();
+            listen_value = argv[++i];
+        } else if (std::strcmp(argv[i], "--host") == 0) {
+            host_mode = true;
+        } else {
+            return usage();
         }
+    }
+
+    if (peer_value) {
+        SetEnvironmentVariableA("TH08_PLATFORM_PEER", peer_value);
+    }
+    if (host_mode) {
+        SetEnvironmentVariableA("TH08_PLATFORM_HOST", "1");
+    }
+    if (listen_value) {
+        SetEnvironmentVariableA("TH08_PLATFORM_LISTEN", listen_value);
+    } else if (host_mode) {
+        SetEnvironmentVariableA("TH08_PLATFORM_LISTEN", "7480");
     }
 
     STARTUPINFOA si = {};

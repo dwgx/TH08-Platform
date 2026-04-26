@@ -13,6 +13,7 @@ struct ConfirmedFrame {
 };
 
 bool initialize(const char* peer_spec, std::uint16_t listen_port);
+bool initialize_listen_only(std::uint16_t listen_port);
 void shutdown();
 
 void set_fake_rtt_ms(std::uint32_t fake_rtt_ms);

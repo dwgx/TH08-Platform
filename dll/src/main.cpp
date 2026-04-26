@@ -9,6 +9,7 @@
 #include "logging.h"
 #include "hooks/game_loop.h"
 #include "hooks/input.h"
+#include "hooks/instance_unmutex.h"
 #include "net/lockstep.h"
 #include "net/rollback.h"
 #include "state/player2.h"
@@ -81,21 +82,28 @@ DWORD WINAPI dll_init_thread(LPVOID)
 {
     th08_platform::log_init();
     th08_platform::log_line("th08_platform.dll attached; starting hooks");
+    th08_platform::log_line("phase 6a: CreateMutexA IAT patch %s",
+                            th08_platform::hooks::was_create_mutex_iat_patched()
+                                ? "applied" : "FAILED");
     th08_platform::net::set_fake_rtt_ms(read_fake_rtt_ms());
     th08_platform::net::rollback::reset();
 
     char peer_spec[64] = {};
     const DWORD peer_len = GetEnvironmentVariableA("TH08_PLATFORM_PEER", peer_spec,
                                                    static_cast<DWORD>(sizeof(peer_spec)));
+    const bool host_mode = GetEnvironmentVariableA("TH08_PLATFORM_HOST", nullptr, 0) > 0;
+    const std::uint16_t listen_port = read_listen_port();
     const bool net_ok =
-        peer_len == 0 || th08_platform::net::initialize(peer_spec, read_listen_port());
+        peer_len != 0 ? th08_platform::net::initialize(peer_spec, listen_port)
+                      : (!host_mode ||
+                         th08_platform::net::initialize_listen_only(listen_port));
 
     const bool game_loop_ok = th08_platform::hooks::install_game_loop_hook();
     const bool input_ok = game_loop_ok && th08_platform::hooks::install_input_hook();
     const bool rollback_audio_ok =
         input_ok && th08_platform::net::rollback::install_audio_hooks();
 
-    if (peer_len != 0 && !net_ok) {
+    if ((peer_len != 0 || host_mode) && !net_ok) {
         th08_platform::log_line("phase 4 net init failed; staying local-only");
     }
 
@@ -233,7 +241,11 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID /*reserved*/)
     switch (reason) {
     case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls(hinst);
-        // Avoid non-trivial work in DllMain itself (loader lock).
+        // Phase 6a: must run BEFORE main thread resumes so th08's
+        // sub_443420 sees the patched IAT. The patch is a single
+        // VirtualProtect + pointer write — safe in DllMain.
+        th08_platform::hooks::patch_create_mutex_iat();
+        // Avoid other non-trivial work in DllMain itself (loader lock).
         CreateThread(nullptr, 0, dll_init_thread, nullptr, 0, nullptr);
         break;
     case DLL_PROCESS_DETACH:

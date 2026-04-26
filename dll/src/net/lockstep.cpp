@@ -48,6 +48,7 @@ struct LockstepState {
     WSADATA wsa{};
     bool wsa_ready = false;
     bool configured = false;
+    bool peer_known = false;
     ConnectionState connection = ConnectionState::Disabled;
     UdpSocket socket;
     sockaddr_in peer_addr{};
@@ -176,9 +177,38 @@ bool decode_packet(const UdpDatagram& datagram, Packet& out_packet)
 
 bool send_packet_locked(const Packet& packet)
 {
+    if (!g_state.peer_known) {
+        return false;
+    }
+
     const auto raw = encode_packet(packet);
     return fake_rtt::send_or_queue(g_state.socket, g_state.peer_addr, raw.data(),
                                    static_cast<int>(raw.size()));
+}
+
+bool initialize_socket_locked(std::uint16_t listen_port)
+{
+    if (::WSAStartup(MAKEWORD(2, 2), &g_state.wsa) != 0) {
+        th08_platform::log_line("lockstep init failed: WSAStartup failed");
+        return false;
+    }
+    g_state.wsa_ready = true;
+
+    if (!g_state.socket.open(listen_port)) {
+        th08_platform::log_line("lockstep init failed: bind listen port %u failed",
+                                static_cast<unsigned>(listen_port));
+        g_state.socket.close();
+        ::WSACleanup();
+        g_state.wsa_ready = false;
+        return false;
+    }
+
+    g_state.configured = true;
+    g_state.connection = ConnectionState::Solo;
+    g_state.peer_frames.clear();
+    g_state.last_known_input = 0;
+    g_state.last_receive_tick = 0;
+    return true;
 }
 
 void mark_connected_locked()
@@ -214,7 +244,11 @@ void fall_back_to_solo_locked(const char* reason)
 
 void handle_packet_locked(const Packet& packet, const sockaddr_in& from)
 {
-    if (!same_endpoint(from, g_state.peer_addr)) {
+    if (!g_state.peer_known) {
+        g_state.peer_addr = from;
+        g_state.peer_label = format_endpoint(from);
+        g_state.peer_known = true;
+    } else if (!same_endpoint(from, g_state.peer_addr)) {
         return;
     }
 
@@ -308,33 +342,36 @@ bool initialize(const char* peer_spec, std::uint16_t listen_port)
         return false;
     }
 
-    if (::WSAStartup(MAKEWORD(2, 2), &g_state.wsa) != 0) {
-        th08_platform::log_line("lockstep init failed: WSAStartup failed");
-        return false;
-    }
-    g_state.wsa_ready = true;
-
-    if (!g_state.socket.open(listen_port)) {
-        th08_platform::log_line("lockstep init failed: bind listen port %u failed",
-                                static_cast<unsigned>(listen_port));
-        g_state.socket.close();
-        ::WSACleanup();
-        g_state.wsa_ready = false;
+    if (!initialize_socket_locked(listen_port)) {
         return false;
     }
 
-    g_state.configured = true;
-    g_state.connection = ConnectionState::Solo;
+    g_state.peer_known = true;
     g_state.peer_addr = peer_addr;
     g_state.peer_label = peer_label;
-    g_state.peer_frames.clear();
-    g_state.last_known_input = 0;
-    g_state.last_receive_tick = 0;
 
     if (!wait_for_handshake_locked(kHandshakeWaitMs)) {
         th08_platform::log_line("peer never appeared, running solo");
     }
 
+    return true;
+}
+
+bool initialize_listen_only(std::uint16_t listen_port)
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+
+    if (g_state.configured) {
+        return true;
+    }
+
+    if (!initialize_socket_locked(listen_port)) {
+        return false;
+    }
+
+    g_state.peer_known = false;
+    g_state.peer_addr = {};
+    g_state.peer_label.clear();
     return true;
 }
 
@@ -352,6 +389,7 @@ void shutdown()
 
     g_state.socket.close();
     g_state.peer_frames.clear();
+    g_state.peer_known = false;
     g_state.peer_label.clear();
     g_state.configured = false;
     g_state.connection = ConnectionState::Disabled;

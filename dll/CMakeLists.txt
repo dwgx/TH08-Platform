@@ -40,6 +40,7 @@ add_library(th08_platform SHARED
     src/logging.cpp
     src/hooks/game_loop.cpp
     src/hooks/input.cpp
+    src/hooks/instance_unmutex.cpp
     src/net/udp_socket.cpp
     src/net/lockstep.cpp
     src/net/fake_rtt.cpp
