@@ -8,10 +8,16 @@ namespace th08_platform::state::peer_ghost {
 bool install();
 void uninstall();
 
-// Called from hooked_OnUpdate every frame. Queues an AsciiManager
-// label at the peer's most recently received world position so it
-// renders this frame. Currently a text label "P2"; 6d.3 will swap
-// in an AnmVm sprite if the text-only render proves too crude.
+// Called from hooked_OnUpdate every frame. Queues the in-playfield
+// "P2" label at the peer's most recently received world position.
+// Currently a text label; 6d.3 will swap in an AnmVm sprite.
 void enqueue_peer_label();
+
+// Called from hooked_GetInput every input poll. Queues only the
+// top-strip "NET OK rtt=X P2 L# B# Pw# S#" status line. Split out
+// from enqueue_peer_label() so it renders at title screen too —
+// GetInput ticks on the title menu while OnUpdate (the GameManager
+// trampoline) does not.
+void enqueue_status_strip();
 
 }  // namespace th08_platform::state::peer_ghost

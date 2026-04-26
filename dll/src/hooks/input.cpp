@@ -3,6 +3,7 @@
 #include "../logging.h"
 #include "../net/lockstep.h"
 #include "../state/globals.h"
+#include "../state/peer_ghost.h"
 #include "game_loop.h"
 
 #include <windows.h>
@@ -82,6 +83,11 @@ int __fastcall hooked_GetInput()
         // safe defaults already in scope
     }
     th08_platform::net::send_ghost_pack(frame, px, py, lives, bombs, power, score);
+
+    // Phase 6e.4: queue the always-on connection/HUD strip from here so
+    // it renders at the title screen too (GetInput ticks on the title
+    // menu; OnUpdate does not).
+    th08_platform::state::peer_ghost::enqueue_status_strip();
 
     return ret;
 }

@@ -58,20 +58,14 @@ void uninstall()
     g_AddString = nullptr;
 }
 
-void enqueue_peer_label()
+void enqueue_status_strip()
 {
     if (!g_enabled || !g_AddString) return;
 
     void* const ascii = reinterpret_cast<void*>(globals::kAddr_g_AsciiManager);
     struct Vec3 { float x, y, z; };
 
-    // Calls into ZUN code with our crafted args. SEH so a bad queue
-    // state doesn't crash the game on every frame.
     __try {
-        // Phase 6e.1: top-strip connection status + RTT. Visible during
-        // stage gameplay (hooked_OnUpdate is the GameManager update,
-        // doesn't tick at title — defer always-on display to a future
-        // higher-level update hook).
         char status[96];
         const bool connected = th08_platform::net::is_connected();
         const auto rtt = th08_platform::net::last_rtt_ms();
@@ -87,17 +81,29 @@ void enqueue_peer_label()
                       static_cast<unsigned>(pp), static_cast<unsigned>(ps));
         Vec3 status_pos = { 424.0f, 10.0f, 0.0f };
         g_AddString(ascii, nullptr, &status_pos.x, status);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        log_line("peer_ghost: SEH during status AddString; disabling for safety");
+        g_enabled = false;
+    }
+}
 
-        // Phase 6d.2: P2 label at peer's world position.
-        float wx = 0.0f, wy = 0.0f;
-        std::uint64_t frame = 0;
-        if (!th08_platform::net::peek_peer_ghost(wx, wy, frame)) return;
-        if (wx == 0.0f && wy == 0.0f) return;  // pre-stage, skip
+void enqueue_peer_label()
+{
+    if (!g_enabled || !g_AddString) return;
 
+    float wx = 0.0f, wy = 0.0f;
+    std::uint64_t frame = 0;
+    if (!th08_platform::net::peek_peer_ghost(wx, wy, frame)) return;
+    if (wx == 0.0f && wy == 0.0f) return;  // pre-stage, skip
+
+    void* const ascii = reinterpret_cast<void*>(globals::kAddr_g_AsciiManager);
+    struct Vec3 { float x, y, z; };
+
+    __try {
         Vec3 ghost_pos = { kPlayfieldOriginX + wx, kPlayfieldOriginY + wy, 0.0f };
         g_AddString(ascii, nullptr, &ghost_pos.x, "P2");
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        log_line("peer_ghost: SEH during AddString; disabling for safety");
+        log_line("peer_ghost: SEH during ghost AddString; disabling for safety");
         g_enabled = false;
     }
 }
