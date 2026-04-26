@@ -674,6 +674,12 @@ std::uint32_t shared_seed()
     return g_state.is_host ? g_state.host_seed : g_state.peer_received_seed;
 }
 
+bool is_host()
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    return g_state.is_host;
+}
+
 void send_local_input(std::uint64_t /*frame*/, std::uint16_t /*input*/,
                       std::uint32_t /*checksum*/)
 {

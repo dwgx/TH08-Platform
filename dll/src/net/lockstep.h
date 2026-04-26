@@ -35,6 +35,9 @@ std::uint16_t peek_remote_input(std::uint64_t frame);
 std::uint64_t last_rtt_ms();
 bool has_shared_seed();
 std::uint32_t shared_seed();
+// Phase 6e.5: which side am I? `--host` flag => true; `--peer ip:port` => false.
+// Used by the HUD to label the OTHER player ("P2" on host's screen, "P1" on peer's).
+bool is_host();
 void send_ghost_pack(std::uint64_t frame, float pos_x, float pos_y,
                      std::uint16_t lives, std::uint16_t bombs,
                      std::uint16_t power, std::uint32_t score,

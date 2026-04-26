@@ -86,10 +86,16 @@ void enqueue_status_strip()
         const auto local_rng =
             *reinterpret_cast<const std::uint16_t*>(0x0164D520);
         const auto peer_rng = th08_platform::net::peer_ghost_rng();
+        // Phase 6e.5: the OTHER player's label depends on which side we are.
+        // host's screen labels its peer as P2; peer's screen labels its peer
+        // (the host) as P1. Same string is reused for the in-world ghost
+        // label below.
+        const char* peer_label = th08_platform::net::is_host() ? "P2" : "P1";
         std::snprintf(status, sizeof(status),
-                      "NET %s %llums  P2 %s f=%llu L%u B%u Pw%u S%u  RNG %04x/%04x",
+                      "NET %s %llums  %s %s f=%llu L%u B%u Pw%u S%u  RNG %04x/%04x",
                       connected ? "OK" : "..",
                       static_cast<unsigned long long>(rtt),
+                      peer_label,
                       phase,
                       static_cast<unsigned long long>(pf),
                       static_cast<unsigned>(pl), static_cast<unsigned>(pb),
@@ -118,7 +124,8 @@ void enqueue_peer_label()
 
     __try {
         Vec3 ghost_pos = { kPlayfieldOriginX + wx, kPlayfieldOriginY + wy, 0.0f };
-        g_AddString(ascii, nullptr, &ghost_pos.x, "P2");
+        const char* ghost_text = th08_platform::net::is_host() ? "P2" : "P1";
+        g_AddString(ascii, nullptr, &ghost_pos.x, ghost_text);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         log_line("peer_ghost: SEH during ghost AddString; disabling for safety");
         g_enabled = false;
