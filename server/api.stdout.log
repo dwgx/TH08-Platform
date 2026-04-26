@@ -1,5 +1,0 @@
-{"time":"2026-04-26T17:09:10.479179+09:00","level":"INFO","msg":"api server starting","addr":":18080","version":"0.1.0","commit":"dev","built_at":"1970-01-01T00:00:00Z"}
-{"time":"2026-04-26T17:09:14.2111946+09:00","level":"INFO","msg":"http request","req_id":"dwgx/CDl1Sc1NHg-000001","method":"GET","path":"/healthz","status":200,"latency_ms":0,"remote_addr":"[::1]:64802"}
-{"time":"2026-04-26T17:09:14.2198501+09:00","level":"INFO","msg":"http request","req_id":"dwgx/CDl1Sc1NHg-000002","method":"GET","path":"/readyz","status":200,"latency_ms":0,"remote_addr":"[::1]:64803"}
-{"time":"2026-04-26T17:09:14.2229571+09:00","level":"INFO","msg":"http request","req_id":"dwgx/CDl1Sc1NHg-000003","method":"GET","path":"/v1/version","status":200,"latency_ms":0,"remote_addr":"[::1]:64804"}
-{"time":"2026-04-26T17:09:14.2284379+09:00","level":"INFO","msg":"http request","req_id":"dwgx/CDl1Sc1NHg-000004","method":"GET","path":"/metrics","status":200,"latency_ms":0,"remote_addr":"[::1]:64805"}
