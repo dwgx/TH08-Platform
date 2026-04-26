@@ -139,6 +139,32 @@ int main(int argc, char** argv)
         SetEnvironmentVariableA("TH08_PLATFORM_LISTEN", listen_value);
     } else if (host_mode) {
         SetEnvironmentVariableA("TH08_PLATFORM_LISTEN", "7480");
+    } else if (peer_value) {
+        // Peer mode without an explicit --listen: default to peer_port+1 so
+        // host (peer_port) and peer (peer_port+1) don't collide on same machine.
+        const char* colon = std::strrchr(peer_value, ':');
+        char fallback[16] = "7481";
+        if (colon) {
+            const long pp = std::strtol(colon + 1, nullptr, 10);
+            if (pp > 0 && pp < 65535) {
+                std::snprintf(fallback, sizeof(fallback), "%ld", pp + 1);
+            }
+        }
+        SetEnvironmentVariableA("TH08_PLATFORM_LISTEN", fallback);
+    }
+
+    // Phase 6 net mode: Phase 5 in-process 2P hooks (player2 / dual_collision /
+    // item_routing / p2_input / p2_lives / hud / p2_mirror) are off by default
+    // because they double the per-frame cost and push the game below 60fps.
+    // To opt back into Phase 5 alongside Phase 6 networking, set
+    // TH08_PLATFORM_DISABLE_MULTIPLAYER=0 in the parent shell before launch.
+    if (host_mode || peer_value) {
+        char existing[8] = {};
+        const DWORD have = GetEnvironmentVariableA("TH08_PLATFORM_DISABLE_MULTIPLAYER",
+                                                    existing, sizeof(existing));
+        if (have == 0) {
+            SetEnvironmentVariableA("TH08_PLATFORM_DISABLE_MULTIPLAYER", "1");
+        }
     }
 
     STARTUPINFOA si = {};
