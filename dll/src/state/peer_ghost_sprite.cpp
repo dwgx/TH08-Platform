@@ -22,6 +22,12 @@ constexpr DWORD kPlayer_OnDrawHighPrio_RVA = 0x44D530 - 0x400000;
 // offset 0x208/0x20C from the AnmVm = 0x218/0x21C from Player base.
 constexpr std::ptrdiff_t kOffset_Player_AnmVm_PosX = 0x10 + 0x208;
 constexpr std::ptrdiff_t kOffset_Player_AnmVm_PosY = 0x10 + 0x20C;
+// Player struct's own pos.x/y at +0x2B4/+0x2B8 (verified in
+// dll/src/hooks/input.cpp:54 where we read this for ghost packet).
+// OnDrawHighPrio likely reads from Player.pos directly OR copies it
+// to AnmVm.pos before drawing -- writing both covers either path.
+constexpr std::ptrdiff_t kOffset_Player_PosX = 0x2B4;
+constexpr std::ptrdiff_t kOffset_Player_PosY = 0x2B8;
 
 // AnmManager helpers used to make the second draw look "ghosted" — a
 // translucent blue-gray tint so users can tell the network ghost from the
@@ -67,14 +73,31 @@ int __fastcall hooked_OnDrawHighPrio(void* player_this)
     auto* p = reinterpret_cast<std::uint8_t*>(player_this);
     auto* anm_pos_x = reinterpret_cast<float*>(p + kOffset_Player_AnmVm_PosX);
     auto* anm_pos_y = reinterpret_cast<float*>(p + kOffset_Player_AnmVm_PosY);
+    auto* player_pos_x = reinterpret_cast<float*>(p + kOffset_Player_PosX);
+    auto* player_pos_y = reinterpret_cast<float*>(p + kOffset_Player_PosY);
 
     void* mgr = *reinterpret_cast<void**>(kAddr_g_AnmManager_ptr);
 
+    // One-shot debug log so we can confirm the ghost path is firing in
+    // a fresh log file. Only the first ghost-frame logs; subsequent
+    // frames are silent.
+    static bool s_logged_once = false;
+    if (!s_logged_once) {
+        s_logged_once = true;
+        th08_platform::log_line(
+            "phase 6d.3: ghost-draw firing (peer at %.1f,%.1f mgr=%p tint=ok=%d)",
+            peer_x, peer_y, mgr, mgr && g_SetMixColor ? 1 : 0);
+    }
+
     __try {
-        const float saved_x = *anm_pos_x;
-        const float saved_y = *anm_pos_y;
+        const float saved_anm_x = *anm_pos_x;
+        const float saved_anm_y = *anm_pos_y;
+        const float saved_player_x = *player_pos_x;
+        const float saved_player_y = *player_pos_y;
         *anm_pos_x = peer_x;
         *anm_pos_y = peer_y;
+        *player_pos_x = peer_x;
+        *player_pos_y = peer_y;
         if (mgr && g_SetMixColor) {
             g_SetMixColor(mgr, kGhostTint);
         }
@@ -82,8 +105,10 @@ int __fastcall hooked_OnDrawHighPrio(void* player_this)
         if (mgr && g_SetMixColorDefault) {
             g_SetMixColorDefault(mgr);
         }
-        *anm_pos_x = saved_x;
-        *anm_pos_y = saved_y;
+        *anm_pos_x = saved_anm_x;
+        *anm_pos_y = saved_anm_y;
+        *player_pos_x = saved_player_x;
+        *player_pos_y = saved_player_y;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         // Don't permanently disable — just skip this frame's ghost draw.
         // If the SEH fires repeatedly we'd see it in the log; once is fine.

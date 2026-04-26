@@ -33,59 +33,39 @@ std::atomic<uint64_t> g_frame_count{0};
 
 int __fastcall hooked_OnUpdate(void* gm)
 {
-    // Phase 6f.2: stage-entry gate. Announces local stage entry on the
-    // first hooked OnUpdate tick, then while the peer hasn't reported
-    // in (Ctrl_Start_Game not yet received) we (a) paint the
-    // "WAITING FOR P1/P2..." overlay and (b) write isInGameMenu = 1 on
-    // GameManager so TH08 treats the frame as paused (same flag the ESC
-    // pause menu uses; GameManager.hpp:275, GameManager.cpp:54-72 reads
-    // it from OnDraw). When peer arrives we clear the flag once and
-    // unlock; further frames pass through unmodified.
+    // Phase 6f.2 r2: announce stage entry only when actually in stage
+    // (curState == SupervisorState_GameManager == 2), NOT during the
+    // title-screen demo or any other Supervisor state. Without this
+    // gate the demo's GameManager::OnUpdate tick fires our
+    // send_start_game on title, so the peer thinks we entered stage
+    // and unlocks itself prematurely.
     //
-    // Skipping the original OnUpdate (early return with chain CONTINUE)
-    // crashed the game in ~2s -- the chain executor expects each
-    // GameManager tick to actually run. The isInGameMenu flag-flip is
-    // the supported pause path that ZUN already uses, so it should be
-    // safe.
-    static std::atomic<bool> s_start_announced{false};
-    static std::atomic<bool> s_unlocked{false};
-    constexpr std::uintptr_t kAddr_GameManager_isInGameMenu = 0x0160F508 + 0x3DBB2;
-    auto* const isInGameMenu =
-        reinterpret_cast<volatile std::uint8_t*>(kAddr_GameManager_isInGameMenu);
+    // The pause attempt via isInGameMenu = 1 from r1 was wrong: ZUN's
+    // OnDraw treats that flag as "user pressed ESC, draw the pause
+    // menu", which preempted the WAITING overlay with the real pause
+    // UI. Removed.
+    //
+    // Curstate read: g_Supervisor.curState lives at 0x17CE8B4
+    // (verified via th08-decomp/src/GameManager.cpp:60 and
+    // ResultScreen.cpp transitions, which read/write this address as
+    // the Supervisor curState field). 2 == GameManager state, 1 ==
+    // TitleScreen (demo runs here too).
+    constexpr std::uintptr_t kAddr_Supervisor_curState = 0x017CE8B4;
+    const std::int32_t cur_state =
+        *reinterpret_cast<const volatile std::int32_t*>(kAddr_Supervisor_curState);
+    const bool in_real_stage = (cur_state == 2);
 
-    if (th08_platform::net::is_configured() &&
+    static std::atomic<bool> s_start_announced{false};
+    if (in_real_stage && th08_platform::net::is_configured() &&
         !s_start_announced.exchange(true, std::memory_order_acq_rel)) {
         th08_platform::net::send_start_game(1);
     }
     const bool waiting =
-        th08_platform::net::is_configured() &&
+        in_real_stage && th08_platform::net::is_configured() &&
         (!th08_platform::net::is_connected() ||
          th08_platform::net::peer_start_game_frame() < 0);
     if (waiting) {
         th08_platform::state::peer_ghost::enqueue_waiting_overlay();
-        // Force-pause via the same flag ESC sets. SEH-wrap the write
-        // because GameManager+0x3DBB2 is only valid after the GM ctor
-        // ran, which it has by the time OnUpdate first ticks.
-        __try {
-            *isInGameMenu = 1;
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            static bool logged = false;
-            if (!logged) {
-                logged = true;
-                th08_platform::log_line(
-                    "phase 6f.2: SEH writing isInGameMenu (logged once)");
-            }
-        }
-    } else if (!s_unlocked.exchange(true, std::memory_order_acq_rel)) {
-        // First non-waiting tick — clear the pause flag so the stage
-        // can run. Subsequent ticks let ZUN's own ESC handler manage
-        // it without our interference.
-        __try {
-            *isInGameMenu = 0;
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-        }
-        th08_platform::log_line(
-            "phase 6f.2: stage entry gate released (peer ready)");
     }
 
     const auto f = g_frame_count.fetch_add(1, std::memory_order_relaxed) + 1;
