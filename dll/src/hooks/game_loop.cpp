@@ -2,6 +2,7 @@
 #include "../logging.h"
 #include "../net/rollback.h"
 #include "../state/hud.h"
+#include "../state/peer_ghost.h"
 #include "../state/player2_hook.h"
 #include "../state/rng_sync.h"
 
@@ -42,6 +43,7 @@ int __fastcall hooked_OnUpdate(void* gm)
     // GameManager::OnUpdate runs so they're rendered by AsciiManager's
     // OnDrawHighPrio later in the same frame's draw chain.
     th08_platform::state::hud::enqueue_p2_strings();
+    th08_platform::state::peer_ghost::enqueue_peer_label();
     if (f % 60 == 0) {
         th08_platform::log_line("GameManager::OnUpdate tick: frame %llu",
                                 static_cast<unsigned long long>(f));

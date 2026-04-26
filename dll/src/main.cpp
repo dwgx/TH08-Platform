@@ -13,6 +13,7 @@
 #include "net/lockstep.h"
 #include "net/pump_thread.h"
 #include "net/rollback.h"
+#include "state/peer_ghost.h"
 #include "state/player2.h"
 #include "state/player2_hook.h"
 #include "state/dual_collision.h"
@@ -113,6 +114,9 @@ DWORD WINAPI dll_init_thread(LPVOID)
     // OnUpdate doesn't fire).
     if (net_ok && (peer_len != 0 || host_mode)) {
         th08_platform::net::start_pump_thread();
+        // Phase 6d.2: arm AsciiManager-based peer label render. No-ops
+        // until the first Ctrl_Ghost packet lands.
+        th08_platform::state::peer_ghost::install();
     }
 
     // Phase 5 (multiplayer) is default-on. Set TH08_PLATFORM_DISABLE_MULTIPLAYER=1
@@ -269,6 +273,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID /*reserved*/)
         th08_platform::hooks::uninstall_game_loop_hook();
         // Stop pump BEFORE net::shutdown so the thread isn't poking the
         // socket while we close it.
+        th08_platform::state::peer_ghost::uninstall();
         th08_platform::net::stop_pump_thread();
         th08_platform::net::shutdown();
         th08_platform::log_shutdown();
