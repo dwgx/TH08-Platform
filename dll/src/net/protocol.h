@@ -84,7 +84,9 @@ struct CtrlPack {
             std::uint16_t power;     // +12: GM->stats[0x98], truncated float
             std::uint16_t pad;       // +14: alignment
             std::uint32_t score;     // +16: GM->stats[0x08], score / 10 in ZUN's units
-        } ghost_pos;                 // total 20 bytes; well under union 30B max
+            std::uint16_t rng_state; // +20: 6g.1 *(uint16*)0x0164D520 — sender's RNG state
+            std::uint16_t pad2;      // +22: alignment
+        } ghost_pos;                 // total 24 bytes; under union 30B max
     };
     InGameCtrlType igc_type[kKeyPackFrameNum];
     std::uint16_t rng_seed[kKeyPackFrameNum];

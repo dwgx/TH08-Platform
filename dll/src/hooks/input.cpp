@@ -82,7 +82,12 @@ int __fastcall hooked_GetInput()
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         // safe defaults already in scope
     }
-    th08_platform::net::send_ghost_pack(frame, px, py, lives, bombs, power, score);
+    // Phase 6g.1: forward g_Rng state for desync detection. RNG is the
+    // 16-bit word at 0x0164D520 (verified IDA, see docs/6c_rng_sync_audit.md).
+    const std::uint16_t rng_state =
+        *reinterpret_cast<const std::uint16_t*>(0x0164D520);
+    th08_platform::net::send_ghost_pack(frame, px, py, lives, bombs, power,
+                                         score, rng_state);
 
     // Phase 6e.4: queue the always-on connection/HUD strip from here so
     // it renders at the title screen too (GetInput ticks on the title

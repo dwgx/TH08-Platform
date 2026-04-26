@@ -81,14 +81,21 @@ void enqueue_status_strip()
         const char* phase = !got_ghost ? "WAIT"
                           : (pf == 0)  ? "TITLE"
                           :              "STAGE";
+        // Phase 6g.1: show local + peer RNG state side by side. If they
+        // diverge once both peers are in stage, that's a desync.
+        const auto local_rng =
+            *reinterpret_cast<const std::uint16_t*>(0x0164D520);
+        const auto peer_rng = th08_platform::net::peer_ghost_rng();
         std::snprintf(status, sizeof(status),
-                      "NET %s %llums  P2 %s f=%llu L%u B%u Pw%u S%u",
+                      "NET %s %llums  P2 %s f=%llu L%u B%u Pw%u S%u  RNG %04x/%04x",
                       connected ? "OK" : "..",
                       static_cast<unsigned long long>(rtt),
                       phase,
                       static_cast<unsigned long long>(pf),
                       static_cast<unsigned>(pl), static_cast<unsigned>(pb),
-                      static_cast<unsigned>(pp), static_cast<unsigned>(ps));
+                      static_cast<unsigned>(pp), static_cast<unsigned>(ps),
+                      static_cast<unsigned>(local_rng),
+                      static_cast<unsigned>(peer_rng));
         Vec3 status_pos = { 424.0f, 10.0f, 0.0f };
         g_AddString(ascii, nullptr, &status_pos.x, status);
     } __except (EXCEPTION_EXECUTE_HANDLER) {

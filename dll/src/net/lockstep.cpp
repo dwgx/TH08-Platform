@@ -81,6 +81,7 @@ struct LockstepState {
     std::uint16_t peer_ghost_bombs = 0;
     std::uint16_t peer_ghost_power = 0;
     std::uint32_t peer_ghost_score = 0;
+    std::uint16_t peer_ghost_rng = 0;     // 6g.1: peer's g_Rng state at last ghost send
     bool peer_ghost_seen = false;
     std::uint64_t ghost_recv_count = 0;
     std::int64_t peer_start_frame = -1;  // 6f: host's frame at start_game send
@@ -253,6 +254,7 @@ void handle_packet_locked(const Pack& packet, const sockaddr_in& from)
             g_state.peer_ghost_bombs = packet.ctrl.ghost_pos.bombs;
             g_state.peer_ghost_power = packet.ctrl.ghost_pos.power;
             g_state.peer_ghost_score = packet.ctrl.ghost_pos.score;
+            g_state.peer_ghost_rng = packet.ctrl.ghost_pos.rng_state;
             g_state.peer_ghost_seen = true;
             if ((++g_state.ghost_recv_count % 60ull) == 1ull) {
                 log_line("phase 6d.1: received ghost f=%d x=%.1f y=%.1f L=%u B=%u P=%u S=%u",
@@ -532,7 +534,8 @@ void send_input_pack_if_due(std::uint64_t frame)
 
 void send_ghost_pack(std::uint64_t frame, float pos_x, float pos_y,
                      std::uint16_t lives, std::uint16_t bombs,
-                     std::uint16_t power, std::uint32_t score)
+                     std::uint16_t power, std::uint32_t score,
+                     std::uint16_t rng_state)
 {
     std::lock_guard<std::mutex> lock(g_state.mutex);
     if (!g_state.configured ||
@@ -553,6 +556,8 @@ void send_ghost_pack(std::uint64_t frame, float pos_x, float pos_y,
     p.ctrl.ghost_pos.power = power;
     p.ctrl.ghost_pos.pad = 0;
     p.ctrl.ghost_pos.score = score;
+    p.ctrl.ghost_pos.rng_state = rng_state;
+    p.ctrl.ghost_pos.pad2 = 0;
     for (int i = 0; i < kKeyPackFrameNum; ++i) {
         p.ctrl.igc_type[i] = IGC_NONE;
         p.ctrl.rng_seed[i] = 0;
@@ -602,6 +607,12 @@ std::uint32_t peer_ghost_score()
 {
     std::lock_guard<std::mutex> lock(g_state.mutex);
     return g_state.peer_ghost_score;
+}
+
+std::uint16_t peer_ghost_rng()
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    return g_state.peer_ghost_rng;
 }
 
 void send_start_game(std::uint64_t local_frame)
