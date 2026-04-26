@@ -33,24 +33,59 @@ std::atomic<uint64_t> g_frame_count{0};
 
 int __fastcall hooked_OnUpdate(void* gm)
 {
-    // Phase 6f.2 (partial — visual only): announce stage entry on first
-    // hooked OnUpdate tick, and paint a "WAITING FOR P1/P2..." overlay
-    // while the peer hasn't reported in (or hasn't connected). True
-    // OnUpdate freezing was attempted but skipping the original chain
-    // callback corrupts state and crashes the game in ~2s — the freeze
-    // hook needs to land at the music-select -> stage transition or via
-    // GameManager::isInGameMenu (an IDA-driven RE task; punted for the
-    // codex side). For now the game runs solo on whichever side enters
-    // first; the overlay tells the user what's missing.
+    // Phase 6f.2: stage-entry gate. Announces local stage entry on the
+    // first hooked OnUpdate tick, then while the peer hasn't reported
+    // in (Ctrl_Start_Game not yet received) we (a) paint the
+    // "WAITING FOR P1/P2..." overlay and (b) write isInGameMenu = 1 on
+    // GameManager so TH08 treats the frame as paused (same flag the ESC
+    // pause menu uses; GameManager.hpp:275, GameManager.cpp:54-72 reads
+    // it from OnDraw). When peer arrives we clear the flag once and
+    // unlock; further frames pass through unmodified.
+    //
+    // Skipping the original OnUpdate (early return with chain CONTINUE)
+    // crashed the game in ~2s -- the chain executor expects each
+    // GameManager tick to actually run. The isInGameMenu flag-flip is
+    // the supported pause path that ZUN already uses, so it should be
+    // safe.
     static std::atomic<bool> s_start_announced{false};
+    static std::atomic<bool> s_unlocked{false};
+    constexpr std::uintptr_t kAddr_GameManager_isInGameMenu = 0x0160F508 + 0x3DBB2;
+    auto* const isInGameMenu =
+        reinterpret_cast<volatile std::uint8_t*>(kAddr_GameManager_isInGameMenu);
+
     if (th08_platform::net::is_configured() &&
         !s_start_announced.exchange(true, std::memory_order_acq_rel)) {
         th08_platform::net::send_start_game(1);
     }
-    if (th08_platform::net::is_configured() &&
+    const bool waiting =
+        th08_platform::net::is_configured() &&
         (!th08_platform::net::is_connected() ||
-         th08_platform::net::peer_start_game_frame() < 0)) {
+         th08_platform::net::peer_start_game_frame() < 0);
+    if (waiting) {
         th08_platform::state::peer_ghost::enqueue_waiting_overlay();
+        // Force-pause via the same flag ESC sets. SEH-wrap the write
+        // because GameManager+0x3DBB2 is only valid after the GM ctor
+        // ran, which it has by the time OnUpdate first ticks.
+        __try {
+            *isInGameMenu = 1;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            static bool logged = false;
+            if (!logged) {
+                logged = true;
+                th08_platform::log_line(
+                    "phase 6f.2: SEH writing isInGameMenu (logged once)");
+            }
+        }
+    } else if (!s_unlocked.exchange(true, std::memory_order_acq_rel)) {
+        // First non-waiting tick — clear the pause flag so the stage
+        // can run. Subsequent ticks let ZUN's own ESC handler manage
+        // it without our interference.
+        __try {
+            *isInGameMenu = 0;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+        }
+        th08_platform::log_line(
+            "phase 6f.2: stage entry gate released (peer ready)");
     }
 
     const auto f = g_frame_count.fetch_add(1, std::memory_order_relaxed) + 1;
