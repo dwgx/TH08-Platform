@@ -8,6 +8,7 @@ bin/
 # Test and coverage artifacts
 *.test
 *.out
+*.log
 coverage.out
 
 # Vendor and workspace files
