@@ -1,0 +1,6 @@
+batch,date,target_module,fns_attempted,fns_won,fns_partial_improved,fns_regressed,perfect_after,notes
+pre,2026-04-25,baseline-from-handoff,N/A,N/A,N/A,N/A,414,starting point per memory/00_handoff
+existing,2026-04-26,binary-patcher-Phase1b,N/A,N/A,N/A,N/A,424,th08-decomp 0ce3ac8 e129e80 — pre-existing binary patcher work for AddLives + AddToBombCount (+19.6pp each)
+10,2026-04-26,medium-96-99,16,1,1,1,425,SoundPlayer::StopBGM 100; AsciiManager::InitializeVms 98->99; reverted 1 regression. Codex says rest is codegen-level
+11,2026-04-26,medium-70-95,30,2,2,6,427,ScreenEffect::Clear 100; ScoreDat::FreeAllScores 100; AnmVm::Init 87->96; CalcFadeOut 90->92; surgical revert of 6 regressions
+12,2026-04-26,linkage-3groups,15,0,0,0,427,/D_USE_32BIT_TIME_T no-op; /EHa net -6 reverted; d3dx8.lib swap unhelpful (stdcall decoration in DX 8.0 SDK too); these 15 are permanent partials
