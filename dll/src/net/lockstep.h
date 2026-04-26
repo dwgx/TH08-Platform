@@ -32,6 +32,13 @@ void poll();
 void capture_local_input(std::uint64_t frame, std::uint16_t input);
 void send_input_pack_if_due(std::uint64_t frame);
 std::uint16_t peek_remote_input(std::uint64_t frame);
+// Phase 7: most recent peer input bits (latest frame in ctrl_bits_rcved
+// map, or 0 if none yet). Used by p2_input.cpp Network mode to drive
+// g_Player2's input from peer's keyboard rather than local keyboard /
+// stationary. RUEEE pattern (Controller.cpp:651-655) but simplified --
+// no frame-aligned delay yet, just "freshest available". Phase 7 v2
+// will add a configurable g_delay frames + blocking wait.
+std::uint16_t peer_latest_input();
 std::uint64_t last_rtt_ms();
 bool has_shared_seed();
 std::uint32_t shared_seed();

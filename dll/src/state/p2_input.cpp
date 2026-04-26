@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "../logging.h"
+#include "../net/lockstep.h"
 #include "globals.h"
 #include "player2.h"
 
@@ -28,6 +29,7 @@ enum class Mode {
     Stationary,
     Mirror,
     Demo,
+    Network,  // Phase 7: pull P2 input bits from net::peer_latest_input()
 };
 Mode g_mode = Mode::Stationary;
 std::atomic<unsigned long long> g_p2_calls{0};
@@ -44,6 +46,8 @@ void parse_mode_env()
         g_mode = Mode::Mirror;
     } else if (std::strcmp(buf, "demo") == 0) {
         g_mode = Mode::Demo;
+    } else if (std::strcmp(buf, "network") == 0 || std::strcmp(buf, "net") == 0) {
+        g_mode = Mode::Network;
     } else {
         g_mode = Mode::Stationary;
     }
@@ -168,6 +172,7 @@ int __fastcall hooked_OnUpdate(void* this_, void* edx)
     switch (g_mode) {
         case Mode::Mirror:     /* keep P1 input verbatim - no swap */ break;
         case Mode::Demo:       p2_cur = demo_input_for_frame(ncalls); break;
+        case Mode::Network:    p2_cur = th08_platform::net::peer_latest_input(); break;
         case Mode::Stationary: p2_cur = 0; break;
     }
 
@@ -206,6 +211,7 @@ bool install_hook()
     parse_mode_env();
     const char* mode_str = (g_mode == Mode::Mirror)     ? "mirror"
                          : (g_mode == Mode::Demo)       ? "demo"
+                         : (g_mode == Mode::Network)    ? "network"
                                                         : "stationary";
     log_line("p2_input: mode=%s (env TH08_PLATFORM_P2_INPUT_MODE)", mode_str);
 

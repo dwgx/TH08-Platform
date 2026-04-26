@@ -656,6 +656,18 @@ std::uint16_t peek_remote_input(std::uint64_t frame)
     return out;
 }
 
+std::uint16_t peer_latest_input()
+{
+    std::lock_guard<std::mutex> lock(g_state.mutex);
+    if (g_state.ctrl_bits_rcved.empty()) {
+        return 0;
+    }
+    // map sorted by frame; rbegin() == highest frame seen.
+    std::uint16_t out = 0;
+    WriteToInt(g_state.ctrl_bits_rcved.rbegin()->second, out);
+    return out;
+}
+
 std::uint64_t last_rtt_ms()
 {
     std::lock_guard<std::mutex> lock(g_state.mutex);

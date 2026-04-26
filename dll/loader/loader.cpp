@@ -153,17 +153,26 @@ int main(int argc, char** argv)
         SetEnvironmentVariableA("TH08_PLATFORM_LISTEN", fallback);
     }
 
-    // Phase 6 net mode: Phase 5 in-process 2P hooks (player2 / dual_collision /
-    // item_routing / p2_input / p2_lives / hud / p2_mirror) are off by default
-    // because they double the per-frame cost and push the game below 60fps.
-    // To opt back into Phase 5 alongside Phase 6 networking, set
-    // TH08_PLATFORM_DISABLE_MULTIPLAYER=0 in the parent shell before launch.
+    // Phase 7 (RUEEE-style co-op): Phase 5 in-process 2P hooks must be
+    // ON in net mode. They give us g_Player2, dual_collision, item_routing,
+    // p2_lives, hud, p2_mirror -- the equivalent of what RUEEE adds at
+    // the decomp level. The previous policy auto-disabled them under the
+    // assumption that they cost ~30 fps; that cost was actually the
+    // rollback per-frame capture (~40 ms/frame walking ~19 MB of state),
+    // which was bypassed in `eb7f311`. With rollback off, Phase 5 is
+    // expected to fit in the 16.6 ms frame budget. To force Phase 5 off,
+    // set TH08_PLATFORM_DISABLE_MULTIPLAYER=1 in the parent shell.
+    //
+    // Also: in net mode the P2 input source defaults to "network" so
+    // p2_input.cpp pulls peer's keyboard bits via lockstep instead of
+    // the local user's keyboard. Override with
+    // TH08_PLATFORM_P2_INPUT_MODE=stationary/mirror/demo/network if you
+    // want different.
     if (host_mode || peer_value) {
-        char existing[8] = {};
-        const DWORD have = GetEnvironmentVariableA("TH08_PLATFORM_DISABLE_MULTIPLAYER",
-                                                    existing, sizeof(existing));
-        if (have == 0) {
-            SetEnvironmentVariableA("TH08_PLATFORM_DISABLE_MULTIPLAYER", "1");
+        char existing_mode[16] = {};
+        if (GetEnvironmentVariableA("TH08_PLATFORM_P2_INPUT_MODE", existing_mode,
+                                    sizeof(existing_mode)) == 0) {
+            SetEnvironmentVariableA("TH08_PLATFORM_P2_INPUT_MODE", "network");
         }
     }
 
