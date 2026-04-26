@@ -1,0 +1,25 @@
+FROM golang:1.23 AS builder
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG VERSION=0.1.0
+ARG COMMIT=dev
+ARG BUILT_AT=1970-01-01T00:00:00Z
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+	-trimpath \
+	-ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.builtAt=${BUILT_AT}" \
+	-o /out/relay ./cmd/relay
+
+FROM gcr.io/distroless/static-debian12:nonroot
+
+WORKDIR /app
+
+COPY --from=builder /out/relay /app/relay
+
+ENTRYPOINT ["/app/relay"]

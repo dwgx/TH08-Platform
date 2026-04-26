@@ -1,0 +1,55 @@
+openapi: 3.1.0
+info:
+  title: TH-Platform API
+  version: "1.0.0"
+  description: Minimal PR-1 API skeleton for local development.
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: getHealthz
+      responses:
+        "200":
+          description: API process is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 0.1.0
+                required:
+                  - status
+                  - version
+  /v1/version:
+    get:
+      summary: Build metadata
+      operationId: getVersion
+      responses:
+        "200":
+          description: Static build metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    example: 0.1.0
+                  commit:
+                    type: string
+                    example: abc1234
+                  builtAt:
+                    type: string
+                    format: date-time
+                    example: 2026-04-26T12:00:00Z
+                required:
+                  - version
+                  - commit
+                  - builtAt

@@ -1,0 +1,18 @@
+server:
+  port: 8080
+  shutdown_timeout: 5s
+
+postgres:
+  dsn: postgres://th:th@localhost:5432/th_platform?sslmode=disable
+
+redis:
+  addr: localhost:6379
+
+jwt:
+  private_key_path: config/keys/jwt-private.pem
+  public_key_path: config/keys/jwt-public.pem
+  access_ttl: 15m
+  refresh_ttl: 720h
+
+aes_key_hex: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+log_level: info

@@ -1,0 +1,31 @@
+name: Server CI
+
+on:
+  push:
+    paths:
+      - "server/**"
+  pull_request:
+    paths:
+      - "server/**"
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.0"
+          cache-dependency-path: server/go.sum
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build
+        run: go build ./...

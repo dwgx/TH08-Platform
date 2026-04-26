@@ -1,0 +1,18 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test and coverage artifacts
+*.test
+*.out
+coverage.out
+
+# Vendor and workspace files
+vendor/
+.env
+
+# Local config
+config/config.yaml
