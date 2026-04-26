@@ -14,6 +14,7 @@
 #include "net/pump_thread.h"
 #include "net/rollback.h"
 #include "state/peer_ghost.h"
+#include "state/peer_ghost_sprite.h"
 #include "state/player2.h"
 #include "state/player2_hook.h"
 #include "state/dual_collision.h"
@@ -117,6 +118,9 @@ DWORD WINAPI dll_init_thread(LPVOID)
         // Phase 6d.2: arm AsciiManager-based peer label render. No-ops
         // until the first Ctrl_Ghost packet lands.
         th08_platform::state::peer_ghost::install();
+        // Phase 6d.3: hook Player::OnDrawHighPrio so we can re-draw the
+        // local player's sprite at the peer's world position.
+        th08_platform::state::peer_ghost_sprite::install_hook();
     }
 
     // Phase 5 (multiplayer) is default-on. Set TH08_PLATFORM_DISABLE_MULTIPLAYER=1

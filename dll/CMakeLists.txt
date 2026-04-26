@@ -59,6 +59,7 @@ add_library(th08_platform SHARED
     src/state/p2_mirror.cpp
     src/state/rng_sync.cpp
     src/state/peer_ghost.cpp
+    src/state/peer_ghost_sprite.cpp
 )
 target_include_directories(th08_platform PRIVATE
     src
