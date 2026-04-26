@@ -187,8 +187,31 @@ void reset()
     g_desync_detected = false;
 }
 
+// Phase 6 perf hotfix 2026-04-26: rollback's per-frame state::capture +
+// net::checksum walks ~19 MB across g_GameManager + g_Player +
+// g_ItemManager + g_EnemyManager (~10 MB) + g_BulletManager (~7 MB) +
+// AsciiManager etc. Combined memcpy + byte-by-byte CRC32 takes ~40 ms
+// per frame at 60 Hz target -> game runs at ~20 fps and accumulates
+// 309 MB resident set across the 16-slot history buffer, eventually
+// crashing from heap fragmentation in mid-stage.
+//
+// Phase 4's lockstep stubs (consume_confirmed_frames_up_to /
+// peek_confirmed_frame / send_local_input) are no-ops in the Phase 6b
+// Pack-based wire, so restore_and_replay() is unreachable -> we were
+// paying the capture+checksum cost with zero consumer.
+//
+// Until rollback is genuinely wired (Phase 6g.2 desync auto-restore),
+// short-circuit both halves of the per-frame cycle. install_audio_hooks
+// stays so PlaySoundByIdx blocking works the moment we DO restore.
+constexpr bool kRollbackPerFrameEnabled = false;
+
 void on_frame_start(std::uint64_t frame_number)
 {
+    if (!kRollbackPerFrameEnabled) {
+        g_rollback.local_frame = frame_number;
+        return;
+    }
+
     g_rollback.local_frame = frame_number;
 
     auto& snapshot = g_rollback.history[slot_for(frame_number)];
@@ -208,6 +231,10 @@ void on_frame_start(std::uint64_t frame_number)
 
 void on_frame_end(void* game_manager, std::uint64_t frame_number)
 {
+    if (!kRollbackPerFrameEnabled) {
+        return;
+    }
+
     auto& meta = frame_meta(frame_number);
     meta.local_checksum = th08_platform::net::checksum(
         g_rollback.history[slot_for(frame_number)]);
